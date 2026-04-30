@@ -10,6 +10,28 @@ import ValidationOrdonnance from '../../components/patient/ValidationOrdonnance'
 import PaiementOrdonnance   from '../../components/patient/PaiementOrdonnance';
 import ConfirmationPaiement from '../../components/patient/ConfirmationPaiement';
 import HistoriquePatient    from '../../components/patient/HistoriquePatient';
+import StatsDashboard from '../../components/shared/StatsDashboard';
+import { MOCK_PATIENT_HISTORY } from '../../data/mockData';
+
+const IconClock = (
+  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" style={{ display: 'block' }}>
+    <path d="M12 8v5l3 2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+    <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.4" fill="none" />
+  </svg>
+);
+
+const IconCheck = (
+  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" style={{ display: 'block' }}>
+    <path d="M20 6L9 17l-5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
+const IconCard = (
+  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" style={{ display: 'block' }}>
+    <rect x="2" y="5" width="20" height="14" rx="2" stroke="currentColor" strokeWidth="1.4" fill="none" />
+    <path d="M2 10h20" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+  </svg>
+);
 
 // Send flow steps
 const SEND_STEPS = ['Photo', 'Pharmacie', 'Envoi'];
@@ -69,6 +91,19 @@ export default function PatientPage() {
     { id: 'confirmation', label: 'Confirmé',   icon: 'check2-circle', badge: 0 },
     { id: 'historique',   label: 'Historique', icon: 'journal-text' },
   ];
+
+  const patientHistory = MOCK_PATIENT_HISTORY || [];
+  const getStats = () => {
+    const waiting = ordStatus === 'waiting' ? 1 : 0;
+    const validated = ordStatus === 'validated' ? 1 : 0;
+    const paid = ordStatus === 'paid' ? 1 : 0;
+    const total = patientHistory.length + (ordStatus !== 'idle' ? 1 : 0);
+    return [
+      { label: 'En Attente', value: waiting, icon: IconClock, bgColor: '#eff6ff', iconColor: '#2563eb', onClick: () => setActiveTab('attente') },
+      { label: 'Validées', value: validated, icon: IconCheck, bgColor: '#f0fdf4', iconColor: '#16a34a', onClick: () => setActiveTab('valider') },
+      { label: 'Payées', value: paid, icon: IconCard, bgColor: '#fdf4ff', iconColor: '#9333ea', onClick: () => setActiveTab('paiement') },
+    ];
+  };
 
   const renderContent = () => {
     switch (activeTab) {
@@ -135,6 +170,9 @@ export default function PatientPage() {
       <Topbar />
       <TabNav tabs={tabs} active={activeTab} onChange={setActiveTab} />
       <main className="container" style={{ flex: 1, paddingTop: 'var(--space-md)', paddingBottom: 'var(--space-md)' }}>
+        <div style={{ marginBottom: '18px' }}>
+          <StatsDashboard stats={getStats()} columns={3} />
+        </div>
         {renderContent()}
       </main>
     </div>
