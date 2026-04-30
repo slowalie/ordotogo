@@ -143,17 +143,10 @@ export default function AuthPage() {
         <nav style={{ display: 'flex', alignItems: 'center', gap: '28px', color: 'var(--gray-600)', fontSize: '14px', fontWeight: 500 }}>
           <a href="#features" style={{ color: 'inherit', textDecoration: 'none' }}>Fonctionnalités</a>
           <a href="#actors" style={{ color: 'inherit', textDecoration: 'none' }}>Utilisateurs</a>
-          <a href="#security" style={{ color: 'inherit', textDecoration: 'none' }}>Sécurité</a>
-          <a href="#planning" style={{ color: 'inherit', textDecoration: 'none' }}>Planning</a>
         </nav>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-          <a href="#actors" style={{ textDecoration: 'none', color: 'var(--gray-700)', fontWeight: 600, fontSize: '14px' }}>Connexion</a>
-          <a href="#actors" style={{ textDecoration: 'none' }}>
-            <Button size="md" style={{ borderRadius: '999px', padding: '10px 18px', background: 'linear-gradient(135deg, var(--green-600) 0%, var(--green-500) 100%)', boxShadow: '0 10px 24px rgba(22, 163, 74, 0.22)' }}>
-              Démarrer →
-            </Button>
-          </a>
+          <a href="#actors" style={{ textDecoration: 'none', borderRadius: '999px', padding: '10px 18px', background: 'linear-gradient(135deg, var(--green-600) 0%, var(--green-500) 100%)', boxShadow: '0 10px 24px rgba(22, 163, 74, 0.22)',color: 'var(--green-600)', fontWeight: 600, fontSize: '14px' }}>Connexion</a>
         </div>
       </header>
 
@@ -292,17 +285,7 @@ export default function AuthPage() {
           </div>
         </section>
 
-        <section id="planning" style={{ background: '#0f172a', color: 'rgba(255,255,255,0.8)', padding: '20px 24px' }}>
-          <div style={{ maxWidth: '1320px', margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <div style={{ width: '24px', height: '24px', borderRadius: '7px', background: 'var(--green-600)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <LogoIcon />
-              </div>
-              <span style={{ fontSize: '14px' }}>OrdoTogo — Wireframe / Mockup v1.0</span>
-            </div>
-            <div style={{ fontSize: '14px' }}>Plateforme de prescription numérique · République du Togo · 2026</div>
-          </div>
-        </section>
+       
       </main>
 
       <style>{`
