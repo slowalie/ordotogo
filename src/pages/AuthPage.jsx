@@ -136,7 +136,7 @@ export default function AuthPage() {
       </div>
 
       <p style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginTop: '20px' }}>
-        © 2025 OrdoTogo · Développé par ACACHA Elie
+        © 2025 OrdoTogo · Développé par ACACHA Elie & KINHOU Déo-gracias
       </p>
     </div>
   );
