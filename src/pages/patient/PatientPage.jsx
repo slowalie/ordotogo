@@ -3,15 +3,17 @@ import { useApp } from '../../context/AppContext';
 import Topbar   from '../../components/shared/Topbar';
 import TabNav   from '../../components/shared/TabNav';
 import { StepBar } from '../../components/shared/UI';
+import StatsDashboard from '../../components/shared/StatsDashboard';
 
 import UploadOrdonnance     from '../../components/patient/UploadOrdonnance';
 import ChoixPharmacie       from '../../components/patient/ChoixPharmacie';
 import AttenteOrdonnance    from '../../components/patient/AttenteOrdonnance';
+import AttentePréparation   from '../../components/patient/AttentePréparation';
 import ValidationOrdonnance from '../../components/patient/ValidationOrdonnance';
 import PaiementOrdonnance   from '../../components/patient/PaiementOrdonnance';
 import ConfirmationPaiement from '../../components/patient/ConfirmationPaiement';
 import HistoriquePatient    from '../../components/patient/HistoriquePatient';
-import { PHARMACIES, STATUS } from '../../data/mockData';
+import { PHARMACIES, STATUS, MOCK_PATIENT_HISTORY } from '../../data/mockData';
 
 // Send flow steps
 const SEND_STEPS = ['Photo', 'Pharmacie', 'Envoi'];
@@ -20,6 +22,7 @@ export default function PatientPage() {
   const {
     activeOrder,
     pendingOrders,
+    waitingDeliveryOrders,
     createPatientOrder,
     markOrderValidated,
     markOrderPaid,
@@ -34,6 +37,7 @@ export default function PatientPage() {
   const [accepted,   setAccepted]   = useState({});
   const [payMethod,  setPayMethod]  = useState(null);
   const [selectedWaitingOrderId, setSelectedWaitingOrderId] = useState(null);
+  const [selectedPreparationOrderId, setSelectedPreparationOrderId] = useState(null);
   const ordStatus = activeOrder?.status || 'idle';
 
   useEffect(() => {
@@ -47,6 +51,12 @@ export default function PatientPage() {
 
     if (activeOrder.status === STATUS.WAITING_VALIDATION) {
       setActiveTab('valider');
+      return;
+    }
+
+    if ([STATUS.PREPARING, STATUS.READY_FOR_PICKUP].includes(activeOrder.status)) {
+      setActiveTab('preparation');
+      return;
     }
   }, [activeOrder?.id, activeOrder?.status]);
 
@@ -120,24 +130,24 @@ export default function PatientPage() {
   };
 
   const tabs = [
-    { id: 'send',         label: 'Envoyer',    icon: 'send' },
-    { id: 'attente',      label: 'En attente', icon: 'hourglass-split', badge: [STATUS.PENDING, STATUS.PROCESSING].includes(ordStatus) ? 1 : 0 },
-    { id: 'valider',      label: 'Valider',    icon: 'check-circle', badge: ordStatus === STATUS.WAITING_VALIDATION ? 1 : 0 },
-    { id: 'paiement',     label: 'Paiement',   icon: 'credit-card-2-front', badge: ordStatus === STATUS.VALIDATED ? 1 : 0 },
-    { id: 'confirmation', label: 'Confirmé',   icon: 'check2-circle', badge: 0 },
-    { id: 'historique',   label: 'Historique', icon: 'journal-text' },
+    { id: 'send',         label: 'Envoyer',      icon: 'send' },
+    { id: 'attente',      label: 'En attente',   icon: 'hourglass-split', badge: [STATUS.PENDING, STATUS.PROCESSING].includes(ordStatus) ? 1 : 0 },
+    { id: 'valider',      label: 'Valider',      icon: 'check-circle', badge: ordStatus === STATUS.WAITING_VALIDATION ? 1 : 0 },
+    { id: 'paiement',     label: 'Paiement',     icon: 'credit-card-2-front', badge: ordStatus === STATUS.VALIDATED ? 1 : 0 },
+    { id: 'preparation',  label: 'Préparation',  icon: 'box2', badge: [STATUS.PREPARING, STATUS.READY_FOR_PICKUP].includes(ordStatus) ? 1 : 0 },
+    { id: 'historique',   label: 'Historique',   icon: 'journal-text' },
   ];
 
   const patientHistory = MOCK_PATIENT_HISTORY || [];
   const getStats = () => {
     const waiting = ordStatus === 'waiting' ? 1 : 0;
     const validated = ordStatus === 'validated' ? 1 : 0;
-    const paid = ordStatus === 'paid' ? 1 : 0;
+    const preparing = [STATUS.PREPARING, STATUS.READY_FOR_PICKUP].includes(ordStatus) ? 1 : 0;
     const total = patientHistory.length + (ordStatus !== 'idle' ? 1 : 0);
     return [
-      { label: 'En Attente', value: waiting, icon: IconClock, bgColor: '#eff6ff', iconColor: '#2563eb', onClick: () => setActiveTab('attente') },
-      { label: 'Validées', value: validated, icon: IconCheck, bgColor: '#f0fdf4', iconColor: '#16a34a', onClick: () => setActiveTab('valider') },
-      { label: 'Payées', value: paid, icon: IconCard, bgColor: '#fdf4ff', iconColor: '#9333ea', onClick: () => setActiveTab('paiement') },
+      { label: 'En Attente', value: waiting, bgColor: '#eff6ff', iconColor: '#2563eb', onClick: () => setActiveTab('attente') },
+      { label: 'Validées', value: validated, bgColor: '#f0fdf4', iconColor: '#16a34a', onClick: () => setActiveTab('valider') },
+      { label: 'En Préparation', value: preparing, bgColor: '#fef3c7', iconColor: '#d97706', onClick: () => setActiveTab('preparation') },
     ];
   };
 
@@ -194,8 +204,21 @@ export default function PatientPage() {
               Validez d'abord vos médicaments.
             </div>;
 
+      case 'preparation': {
+        if (waitingDeliveryOrders.length === 0) {
+          return <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '14px' }}>
+            Aucune ordonnance en préparation. <button onClick={() => setActiveTab('send')} style={{ color: 'var(--green-600)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--font-body)', fontSize: '14px', fontWeight: 600 }}>Envoyer une ordonnance →</button>
+          </div>;
+        }
+        const handleSelectPrepOrder = (orderId) => {
+          setSelectedPreparationOrderId(orderId);
+          setActiveOrderId(orderId);
+        };
+        return <AttentePréparation orders={waitingDeliveryOrders} selectedOrderId={selectedPreparationOrderId || activeOrder?.id} onSelectOrder={handleSelectPrepOrder} />;
+      }
+
       case 'confirmation':
-        return [STATUS.PAID, STATUS.READY, STATUS.DELIVERED].includes(ordStatus)
+        return [STATUS.DELIVERED].includes(ordStatus)
           ? <ConfirmationPaiement method={payMethod || activeOrder?.paymentMethod} pharmacyId={pharmacyId} onReset={handleReset} />
           : <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '14px' }}>
               Aucune commande confirmée.

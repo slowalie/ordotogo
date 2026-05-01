@@ -7,6 +7,7 @@ import { STATUS } from '../../data/mockData';
 import AlertesPharmacie      from '../../components/pharmacist/AlertesPharmacie';
 import CreerOrdonnance       from '../../components/pharmacist/CreerOrdonnance';
 import PreparationOrdonnances from '../../components/pharmacist/PreparationOrdonnances';
+import ValidateLivraisonOrdonnance from '../../components/pharmacist/ValidateLivraisonOrdonnance';
 import HistoriquePharmacie   from '../../components/pharmacist/HistoriquePharmacie';
 import StatsDashboard from '../../components/shared/StatsDashboard';
 import { MOCK_PHARMA_HISTORY } from '../../data/mockData';
@@ -33,7 +34,7 @@ const IconDoc = (
 );
 
 export default function PharmacistPage() {
-  const { alerts, prepOrders, submitTranscription } = useApp();
+  const { alerts, prepOrders, waitingDeliveryOrders, submitTranscription } = useApp();
   const [activeTab,    setActiveTab]    = useState('alerts');
   const [selectedAlert, setSelectedAlert] = useState(null);
   const [sentSuccess,   setSentSuccess]  = useState(false);
@@ -64,12 +65,14 @@ export default function PharmacistPage() {
   };
 
   const waitingValidationCount = prepOrders.filter(order => order.status === STATUS.PAID).length;
+  const readyForPickupCount = waitingDeliveryOrders.length;
 
   const tabs = [
-    { id: 'alerts',  label: 'Alertes',     icon: 'bell', badge: alerts.length },
-    { id: 'create',  label: 'Ordonnance',  icon: 'pencil-square'  },
-    { id: 'prep',    label: 'Préparation', icon: 'flask', badge: waitingValidationCount },
-    { id: 'history', label: 'Historique',  icon: 'journal-text'  },
+    { id: 'alerts',    label: 'Alertes',      icon: 'bell', badge: alerts.length },
+    { id: 'create',    label: 'Ordonnance',   icon: 'pencil-square'  },
+    { id: 'prep',      label: 'Préparation',  icon: 'flask', badge: waitingValidationCount },
+    { id: 'livraison', label: 'Livraison',    icon: 'bag-check', badge: readyForPickupCount },
+    { id: 'history',   label: 'Historique',   icon: 'journal-text'  },
   ];
 
   const pharmaHistory = MOCK_PHARMA_HISTORY || [];
@@ -139,6 +142,9 @@ export default function PharmacistPage() {
 
       case 'prep':
         return <PreparationOrdonnances />;
+
+      case 'livraison':
+        return <ValidateLivraisonOrdonnance />;
 
       case 'history':
         return <HistoriquePharmacie />;

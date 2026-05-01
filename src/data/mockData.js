@@ -68,11 +68,13 @@ export const MOCK_PHARMA_HISTORY = [
 
 // Statuts ordonnance
 export const STATUS = {
-  PENDING:    'pending',
-  PROCESSING: 'processing',
-  WAITING_VALIDATION: 'waiting_validation',
-  VALIDATED:  'validated',
-  PAID:       'paid',
-  READY:      'ready',
-  DELIVERED:  'delivered',
+  PENDING:              'pending',
+  PROCESSING:           'processing',
+  WAITING_VALIDATION:   'waiting_validation',
+  VALIDATED:            'validated',
+  PAID:                 'paid',
+  PREPARING:            'preparing',           // Pharmacien prépare les médicaments
+  READY_FOR_PICKUP:     'ready_for_pickup',    // Prêt avec QR code et code de récupération
+  AWAITING_DELIVERY:    'awaiting_delivery',   // Patient attend la présentation du code
+  DELIVERED:            'delivered',
 };

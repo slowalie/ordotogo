@@ -105,6 +105,9 @@ export function AppProvider({ children }) {
       paymentMethod: null,
       sentAt: now,
       updatedAt: now,
+      pickupCode: null,        // Code de récupération (6 chiffres)
+      qrCode: null,             // QR code data
+      readyAt: null,            // Quand la préparation est terminée
     };
 
     setPatientOrders(prev => [order, ...prev]);
@@ -144,8 +147,52 @@ export function AppProvider({ children }) {
     setActiveOrderId(orderId);
   };
 
+  // Génère un code de 6 chiffres aléatoire
+  const generatePickupCode = () => {
+    return String(Math.floor(Math.random() * 900000) + 100000);
+  };
+
+  // Génère les données QR code (contient le code de récupération et l'ID de la commande)
+  const generateQRCodeData = (orderId, pickupCode) => {
+    return JSON.stringify({
+      orderId,
+      pickupCode,
+      timestamp: new Date().toISOString(),
+    });
+  };
+
+  // Marque la préparation comme terminée et génère les codes
+  const markPreparationComplete = (orderId) => {
+    const pickupCode = generatePickupCode();
+    const qrCodeData = generateQRCodeData(orderId, pickupCode);
+    
+    updateOrder(orderId, {
+      status: STATUS.READY_FOR_PICKUP,
+      pickupCode,
+      qrCode: qrCodeData,
+      readyAt: new Date().toISOString(),
+    });
+  };
+
+  // Valide la livraison avec le code de récupération
+  const validateDelivery = (orderId, submittedCode) => {
+    const order = getOrderById(orderId);
+    if (!order) return false;
+    
+    // Vérifie si le code soumis correspond au code de récupération
+    if (order.pickupCode === submittedCode) {
+      updateOrder(orderId, {
+        status: STATUS.DELIVERED,
+        deliveredAt: new Date().toISOString(),
+      });
+      return true;
+    }
+    
+    return false;
+  };
+
   const markOrderReady = (orderId) => {
-    updateOrder(orderId, { status: STATUS.READY });
+    updateOrder(orderId, { status: STATUS.PREPARING });
   };
 
   const markOrderDelivered = (orderId) => {
@@ -161,7 +208,8 @@ export function AppProvider({ children }) {
   );
 
   const alerts = patientOrders.filter(order => order.status === STATUS.PENDING);
-  const prepOrders = patientOrders.filter(order => [STATUS.PAID, STATUS.READY].includes(order.status));
+  const prepOrders = patientOrders.filter(order => [STATUS.PAID, STATUS.PREPARING].includes(order.status));
+  const waitingDeliveryOrders = patientOrders.filter(order => [STATUS.READY_FOR_PICKUP, STATUS.AWAITING_DELIVERY].includes(order.status));
 
   return (
     <AppContext.Provider value={{
@@ -174,10 +222,13 @@ export function AppProvider({ children }) {
       markOrderValidated,
       markOrderPaid,
       markOrderReady,
+      markPreparationComplete,
+      validateDelivery,
       markOrderDelivered,
       getOrderById,
       alerts,
       prepOrders,
+      waitingDeliveryOrders,
       pendingOrders,
     }}>
       {children}
