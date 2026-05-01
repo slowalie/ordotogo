@@ -21,6 +21,7 @@ const SEND_STEPS = ['Photo', 'Pharmacie', 'Envoi'];
 export default function PatientPage() {
   const {
     activeOrder,
+    patientOrders,
     pendingOrders,
     waitingDeliveryOrders,
     createPatientOrder,
@@ -39,26 +40,6 @@ export default function PatientPage() {
   const [selectedWaitingOrderId, setSelectedWaitingOrderId] = useState(null);
   const [selectedPreparationOrderId, setSelectedPreparationOrderId] = useState(null);
   const ordStatus = activeOrder?.status || 'idle';
-
-  useEffect(() => {
-    if (!activeOrder) return;
-
-    if ([STATUS.PENDING, STATUS.PROCESSING].includes(activeOrder.status)) {
-      setSendStep(2);
-      setActiveTab('attente');
-      return;
-    }
-
-    if (activeOrder.status === STATUS.WAITING_VALIDATION) {
-      setActiveTab('valider');
-      return;
-    }
-
-    if ([STATUS.PREPARING, STATUS.READY_FOR_PICKUP].includes(activeOrder.status)) {
-      setActiveTab('preparation');
-      return;
-    }
-  }, [activeOrder?.id, activeOrder?.status]);
 
   useEffect(() => {
     if (!file) {
@@ -83,6 +64,11 @@ export default function PatientPage() {
     setPharmacyId(activeOrder.pharmacyId);
   }, [activeOrder?.id, activeOrder?.meds]);
 
+  useEffect(() => {
+    // Réinitialiser le payMethod quand on change d'ordonnance
+    setPayMethod(null);
+  }, [activeOrder?.id]);
+
   const handleFileChange = (f) => setFile(f);
 
   const handleSend = () => {
@@ -95,8 +81,11 @@ export default function PatientPage() {
       pharmacy,
     });
 
-    setSendStep(2);
-    setActiveTab('attente');
+    // Réinitialiser le formulaire pour permettre une nouvelle ordonnance
+    setSendStep(0);
+    setFile(null);
+    setPreviewUrl('');
+    setPharmacyId(null);
   };
 
   const toggleMed = (id) => {
@@ -109,14 +98,18 @@ export default function PatientPage() {
     const total = acceptedMeds.reduce((sum, med) => sum + med.price, 0);
     if (!acceptedMeds.length) return;
     markOrderValidated(activeOrder.id, acceptedMeds, total);
-    setActiveTab('paiement');
+    
+    // Afficher un message de succès via un toast ou similaire
+    // Pour l'instant, rien ne change automatiquement
   };
 
   const handlePaid = (method) => {
     if (!activeOrder) return;
     setPayMethod(method);
     markOrderPaid(activeOrder.id, method);
-    setActiveTab('confirmation');
+    
+    // Afficher un message de succès
+    // Pour l'instant, rien ne change automatiquement
   };
 
   const handleReset = () => {
@@ -131,31 +124,49 @@ export default function PatientPage() {
 
   const tabs = [
     { id: 'send',         label: 'Envoyer',      icon: 'send' },
-    { id: 'attente',      label: 'En attente',   icon: 'hourglass-split', badge: [STATUS.PENDING, STATUS.PROCESSING].includes(ordStatus) ? 1 : 0 },
-    { id: 'valider',      label: 'Valider',      icon: 'check-circle', badge: ordStatus === STATUS.WAITING_VALIDATION ? 1 : 0 },
-    { id: 'paiement',     label: 'Paiement',     icon: 'credit-card-2-front', badge: ordStatus === STATUS.VALIDATED ? 1 : 0 },
-    { id: 'preparation',  label: 'Préparation',  icon: 'box2', badge: [STATUS.PREPARING, STATUS.READY_FOR_PICKUP].includes(ordStatus) ? 1 : 0 },
+    { id: 'attente',      label: 'En attente',   icon: 'hourglass-split', badge: pendingOrders.filter(o => [STATUS.PENDING, STATUS.PROCESSING, STATUS.WAITING_VALIDATION].includes(o.status)).length },
+    { id: 'valider',      label: 'Valider',      icon: 'check-circle', badge: patientOrders.filter(o => o.status === STATUS.VALIDATED).length },
+    { id: 'paiement',     label: 'Paiement',     icon: 'credit-card-2-front', badge: patientOrders.filter(o => o.status === STATUS.VALIDATED).length },
+    { id: 'preparation',  label: 'Préparation',  icon: 'box2', badge: patientOrders.filter(o => [STATUS.PREPARING, STATUS.READY_FOR_PICKUP].includes(o.status)).length },
     { id: 'historique',   label: 'Historique',   icon: 'journal-text' },
   ];
 
   const patientHistory = MOCK_PATIENT_HISTORY || [];
   const getStats = () => {
-    const waiting = ordStatus === 'waiting' ? 1 : 0;
-    const validated = ordStatus === 'validated' ? 1 : 0;
-    const preparing = [STATUS.PREPARING, STATUS.READY_FOR_PICKUP].includes(ordStatus) ? 1 : 0;
-    const total = patientHistory.length + (ordStatus !== 'idle' ? 1 : 0);
+    const attenteOrders = pendingOrders.filter(o => [STATUS.PENDING, STATUS.PROCESSING, STATUS.WAITING_VALIDATION].includes(o.status));
+    const validatedOrders = patientOrders.filter(o => o.status === STATUS.VALIDATED);
+    const preparingOrders = patientOrders.filter(o => [STATUS.PREPARING, STATUS.READY_FOR_PICKUP].includes(o.status));
+    
     return [
-      { label: 'En Attente', value: waiting, bgColor: '#eff6ff', iconColor: '#2563eb', onClick: () => setActiveTab('attente') },
-      { label: 'Validées', value: validated, bgColor: '#f0fdf4', iconColor: '#16a34a', onClick: () => setActiveTab('valider') },
-      { label: 'En Préparation', value: preparing, bgColor: '#fef3c7', iconColor: '#d97706', onClick: () => setActiveTab('preparation') },
+      { label: 'En Attente', value: attenteOrders.length, bgColor: '#eff6ff', iconColor: '#2563eb', onClick: () => setActiveTab('attente') },
+      { label: 'Validées', value: validatedOrders.length, bgColor: '#f0fdf4', iconColor: '#16a34a', onClick: () => setActiveTab('valider') },
+      { label: 'En Préparation', value: preparingOrders.length, bgColor: '#fef3c7', iconColor: '#d97706', onClick: () => setActiveTab('preparation') },
     ];
   };
 
   const renderContent = () => {
     switch (activeTab) {
-      case 'send':
+      case 'send': {
+        const attenteOrders = pendingOrders.filter(o => [STATUS.PENDING, STATUS.PROCESSING, STATUS.WAITING_VALIDATION].includes(o.status));
+        
         return (
           <div>
+            {attenteOrders.length > 0 && (
+              <div style={{ 
+                marginBottom: '24px', 
+                padding: '16px', 
+                background: 'rgba(59, 130, 246, 0.05)',
+                border: '1px solid rgba(59, 130, 246, 0.2)',
+                borderRadius: 'var(--radius)',
+                fontSize: '14px',
+                color: 'var(--blue-700)'
+              }}>
+                <div style={{ fontWeight: 600, marginBottom: '8px' }}>ℹ️ {attenteOrders.length} ordonnance(s) en cours de traitement</div>
+                <div style={{ fontSize: '13px', color: 'var(--blue-600)' }}>
+                  Vous pouvez envoyer une nouvelle ordonnance en parallèle. Consultez l'onglet "En attente" pour suivre vos ordonnances.
+                </div>
+              </div>
+            )}
             {sendStep < 2 && <StepBar steps={SEND_STEPS} current={sendStep} />}
             {sendStep === 0 && (
               <UploadOrdonnance
@@ -175,6 +186,7 @@ export default function PatientPage() {
             )}
           </div>
         );
+      }
 
       case 'attente': {
         const attenteOrders = pendingOrders.filter(o => [STATUS.PENDING, STATUS.PROCESSING, STATUS.WAITING_VALIDATION].includes(o.status));
@@ -190,19 +202,106 @@ export default function PatientPage() {
         return <AttenteOrdonnance orders={attenteOrders} selectedOrderId={selectedWaitingOrderId || activeOrder?.id} onSelectOrder={handleSelectOrder} />;
       }
 
-      case 'valider':
-        return [STATUS.WAITING_VALIDATION, STATUS.VALIDATED, STATUS.PAID].includes(ordStatus)
-          ? <ValidationOrdonnance prescription={activeOrder?.meds || []} accepted={accepted} onToggle={toggleMed} onConfirm={handleValidate} />
-          : <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '14px' }}>
-              En attente de la réponse du pharmacien.
-            </div>;
+      case 'valider': {
+        const validationOrders = patientOrders.filter(o => o.status === STATUS.WAITING_VALIDATION);
+        if (validationOrders.length === 0) {
+          return <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '14px' }}>
+            Aucune ordonnance à valider. <button onClick={() => setActiveTab('send')} style={{ color: 'var(--green-600)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--font-body)', fontSize: '14px', fontWeight: 600 }}>Envoyer une ordonnance →</button>
+          </div>;
+        }
+        
+        const selectedOrder = validationOrders.find(o => o.id === activeOrder?.id) || validationOrders[0];
+        if (!selectedOrder) return null;
+        
+        const handleSelectValidationOrder = (orderId) => {
+          setActiveOrderId(orderId);
+        };
+        
+        return (
+          <div>
+            {validationOrders.length > 1 && (
+              <div style={{ marginBottom: '16px' }}>
+                <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--gray-600)', marginBottom: '8px', textTransform: 'uppercase' }}>
+                  Ordonnances à valider ({validationOrders.length})
+                </div>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  {validationOrders.map(order => (
+                    <button
+                      key={order.id}
+                      onClick={() => handleSelectValidationOrder(order.id)}
+                      style={{
+                        padding: '8px 12px',
+                        border: selectedOrder.id === order.id ? '2px solid var(--green-600)' : '1px solid var(--gray-300)',
+                        borderRadius: 'var(--radius)',
+                        background: selectedOrder.id === order.id ? 'rgba(34, 197, 94, 0.1)' : 'transparent',
+                        cursor: 'pointer',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        color: selectedOrder.id === order.id ? 'var(--green-700)' : 'var(--gray-700)',
+                        transition: 'all .2s'
+                      }}
+                    >
+                      {order.pharmacyName}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            <ValidationOrdonnance prescription={selectedOrder?.meds || []} accepted={accepted} onToggle={toggleMed} onConfirm={handleValidate} />
+          </div>
+        );
+      }
 
-      case 'paiement':
-        return [STATUS.VALIDATED, STATUS.PAID].includes(ordStatus)
-          ? <PaiementOrdonnance pharmacyId={pharmacyId} meds={activeOrder?.meds || []} total={activeOrder?.total || 0} onConfirm={handlePaid} />
-          : <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '14px' }}>
-              Validez d'abord vos médicaments.
-            </div>;
+      case 'paiement': {
+        const paymentOrders = patientOrders.filter(o => o.status === STATUS.VALIDATED);
+        if (paymentOrders.length === 0) {
+          return <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '14px' }}>
+            Aucune ordonnance à payer. <button onClick={() => setActiveTab('valider')} style={{ color: 'var(--green-600)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--font-body)', fontSize: '14px', fontWeight: 600 }}>Valider une ordonnance →</button>
+          </div>;
+        }
+        
+        const selectedOrder = paymentOrders.find(o => o.id === activeOrder?.id) || paymentOrders[0];
+        if (!selectedOrder) return null;
+        
+        const handleSelectPaymentOrder = (orderId) => {
+          setActiveOrderId(orderId);
+          setPharmacyId(selectedOrder.pharmacyId);
+        };
+        
+        return (
+          <div>
+            {paymentOrders.length > 1 && (
+              <div style={{ marginBottom: '16px' }}>
+                <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--gray-600)', marginBottom: '8px', textTransform: 'uppercase' }}>
+                  Ordonnances à payer ({paymentOrders.length})
+                </div>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  {paymentOrders.map(order => (
+                    <button
+                      key={order.id}
+                      onClick={() => handleSelectPaymentOrder(order.id)}
+                      style={{
+                        padding: '8px 12px',
+                        border: selectedOrder.id === order.id ? '2px solid var(--green-600)' : '1px solid var(--gray-300)',
+                        borderRadius: 'var(--radius)',
+                        background: selectedOrder.id === order.id ? 'rgba(34, 197, 94, 0.1)' : 'transparent',
+                        cursor: 'pointer',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        color: selectedOrder.id === order.id ? 'var(--green-700)' : 'var(--gray-700)',
+                        transition: 'all .2s'
+                      }}
+                    >
+                      {order.pharmacyName}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            <PaiementOrdonnance pharmacyId={selectedOrder.pharmacyId} meds={selectedOrder?.meds || []} total={selectedOrder?.total || 0} onConfirm={handlePaid} />
+          </div>
+        );
+      }
 
       case 'preparation': {
         if (waitingDeliveryOrders.length === 0) {
@@ -217,12 +316,22 @@ export default function PatientPage() {
         return <AttentePréparation orders={waitingDeliveryOrders} selectedOrderId={selectedPreparationOrderId || activeOrder?.id} onSelectOrder={handleSelectPrepOrder} />;
       }
 
-      case 'confirmation':
-        return [STATUS.DELIVERED].includes(ordStatus)
-          ? <ConfirmationPaiement method={payMethod || activeOrder?.paymentMethod} pharmacyId={pharmacyId} onReset={handleReset} />
-          : <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '14px' }}>
-              Aucune commande confirmée.
-            </div>;
+      case 'confirmation': {
+        const paidOrders = patientOrders.filter(o => o.status === STATUS.PAID);
+        if (paidOrders.length === 0) {
+          return <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '14px' }}>
+            Aucune commande payée. <button onClick={() => setActiveTab('paiement')} style={{ color: 'var(--green-600)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--font-body)', fontSize: '14px', fontWeight: 600 }}>Payer une ordonnance →</button>
+          </div>;
+        }
+        
+        const selectedOrder = paidOrders.find(o => o.id === activeOrder?.id) || paidOrders[0];
+        if (!selectedOrder) return null;
+        
+        return <ConfirmationPaiement method={payMethod || selectedOrder?.paymentMethod} pharmacyId={selectedOrder.pharmacyId} onReset={() => {
+          handleReset();
+          setActiveTab('send');
+        }} />;
+      }
 
       case 'historique':
         return <HistoriquePatient />;

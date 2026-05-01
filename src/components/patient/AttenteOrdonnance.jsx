@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Card, Spinner, BiIcon } from '../shared/UI';
+import { Card, BiIcon } from '../shared/UI';
 import { PHARMACIES, STATUS } from '../../data/mockData';
 
 function formatClock(isoDate) {
@@ -126,8 +126,8 @@ export default function AttenteOrdonnance({ orders = [], selectedOrderId, onSele
       {selectedOrder && (
         <>
           <Card className="waiting-card">
-            <div className="waiting-card__spinner">
-              <Spinner size={48} />
+            <div className="waiting-card__spinner" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <BiIcon name="hourglass-split" size={36} style={{ color: 'var(--green-600)' }} />
             </div>
             <div className="waiting-card__title">
               {isAnalyzing ? 'Ordonnance envoyée' : 'Transcription en cours'}

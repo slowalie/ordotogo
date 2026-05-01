@@ -4,7 +4,7 @@ export const PHARMACIES = [
   { id: 1, name: 'Pharmacie Bénin Santé',  zone: 'Lomé Centre',  dist: '0.4 km', phone: '+228 90 00 01 01', open: true  },
   { id: 2, name: 'Pharmacie du Golfe',     zone: 'Tokoin',       dist: '0.9 km', phone: '+228 90 00 02 02', open: true  },
   { id: 3, name: 'Pharmacie Espoir',       zone: 'Bè-Kpota',    dist: '1.6 km', phone: '+228 90 00 03 03', open: false },
-  { id: 4, name: 'Pharmacie de la Paix',   zone: 'Hédzranawoé', dist: '2.1 km', phone: '+228 90 00 04 04', open: true  },
+  { id: 4, name: 'Pharmacie LUMEN',   zone: 'Djagblé', dist: '2.1 km', phone: '+228 90 00 04 04', open: true  },
 ];
 
 export const DRUG_DATABASE = [
