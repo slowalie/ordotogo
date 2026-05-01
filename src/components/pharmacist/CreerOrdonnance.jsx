@@ -22,8 +22,29 @@ export default function CreerOrdonnance({ alert, onSend, onBack }) {
   }, 0);
 
   const handleSend = () => {
+    const medsPayload = validMeds.map((med, index) => {
+      const drug = DRUG_DATABASE.find(d => d.id === med.drugId);
+      const qty = parseInt(med.qty || 1, 10);
+      return {
+        id: `${med.drugId}-${index + 1}`,
+        drugId: med.drugId,
+        name: drug?.name || 'Médicament',
+        qty,
+        duree: med.duree,
+        posologie: med.posologie || `Durée: ${med.duree}`,
+        price: (drug?.price || 0) * qty,
+      };
+    });
+
     setSending(true);
-    setTimeout(() => { setSending(false); onSend(); }, 1500);
+    setTimeout(() => {
+      setSending(false);
+      onSend({
+        meds: medsPayload,
+        conseil,
+        total,
+      });
+    }, 1500);
   };
 
   return (
@@ -39,8 +60,12 @@ export default function CreerOrdonnance({ alert, onSend, onBack }) {
               <div className="pharma-info-card__id">{alert.patientId}</div>
             </div>
             <div className="pharma-info-card__photo">
-              <div className="pharma-info-card__photo-box"><BiIcon name="clipboard" /></div>
-              <div className="pharma-info-card__photo-label">Voir photo</div>
+              {alert.prescriptionPreview ? (
+                <img src={alert.prescriptionPreview} alt="Ordonnance" className="pharma-info-card__preview" />
+              ) : (
+                <div className="pharma-info-card__photo-box"><BiIcon name="clipboard" /></div>
+              )}
+              <div className="pharma-info-card__photo-label">{alert.prescriptionFileName || 'Photo ordonnance'}</div>
             </div>
           </div>
         </Card>

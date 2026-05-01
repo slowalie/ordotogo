@@ -1,7 +1,8 @@
 import { useState } from 'react';
+import { useApp } from '../../context/AppContext';
 import Topbar from '../../components/shared/Topbar';
 import TabNav from '../../components/shared/TabNav';
-import { MOCK_ALERTS } from '../../data/mockData';
+import { STATUS } from '../../data/mockData';
 
 import AlertesPharmacie      from '../../components/pharmacist/AlertesPharmacie';
 import CreerOrdonnance       from '../../components/pharmacist/CreerOrdonnance';
@@ -9,8 +10,8 @@ import PreparationOrdonnances from '../../components/pharmacist/PreparationOrdon
 import HistoriquePharmacie   from '../../components/pharmacist/HistoriquePharmacie';
 
 export default function PharmacistPage() {
+  const { alerts, prepOrders, submitTranscription } = useApp();
   const [activeTab,    setActiveTab]    = useState('alerts');
-  const [alerts,       setAlerts]       = useState(MOCK_ALERTS);
   const [selectedAlert, setSelectedAlert] = useState(null);
   const [sentSuccess,   setSentSuccess]  = useState(false);
 
@@ -20,9 +21,14 @@ export default function PharmacistPage() {
     setSentSuccess(false);
   };
 
-  const handleSent = () => {
-    // Remove alert from list
-    setAlerts(prev => prev.filter(a => a.id !== selectedAlert?.id));
+  const handleSent = (payload) => {
+    if (!selectedAlert) return;
+    submitTranscription({
+      orderId: selectedAlert.id,
+      meds: payload.meds,
+      conseil: payload.conseil,
+      total: payload.total,
+    });
     setSentSuccess(true);
   };
 
@@ -32,10 +38,12 @@ export default function PharmacistPage() {
     setSentSuccess(false);
   };
 
+  const waitingValidationCount = prepOrders.filter(order => order.status === STATUS.PAID).length;
+
   const tabs = [
     { id: 'alerts',  label: 'Alertes',     icon: 'bell', badge: alerts.length },
     { id: 'create',  label: 'Ordonnance',  icon: 'pencil-square'  },
-    { id: 'prep',    label: 'Préparation', icon: 'flask', badge: 1 },
+    { id: 'prep',    label: 'Préparation', icon: 'flask', badge: waitingValidationCount },
     { id: 'history', label: 'Historique',  icon: 'journal-text'  },
   ];
 
