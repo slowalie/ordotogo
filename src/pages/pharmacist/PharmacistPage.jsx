@@ -10,7 +10,6 @@ import PreparationOrdonnances from '../../components/pharmacist/PreparationOrdon
 import ValidateLivraisonOrdonnance from '../../components/pharmacist/ValidateLivraisonOrdonnance';
 import HistoriquePharmacie   from '../../components/pharmacist/HistoriquePharmacie';
 import StatsDashboard from '../../components/shared/StatsDashboard';
-import { MOCK_PHARMA_HISTORY } from '../../data/mockData';
 
 const IconBell = (
   <svg viewBox="0 0 24 24" width="20" height="20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" style={{ display: 'block' }}>
@@ -76,11 +75,11 @@ export default function PharmacistPage() {
   ];
 
   const deliveredOrders = patientOrders.filter(order => order.status === STATUS.DELIVERED);
-  const pharmaHistory = deliveredOrders.length > 0 ? deliveredOrders : MOCK_PHARMA_HISTORY || [];
+  const pharmaHistory = deliveredOrders; // no default mock history
   const getStats = () => {
     const pending = alerts.length;
     const preparations = prepOrders.length;
-    const historyCount = deliveredOrders.length > 0 ? deliveredOrders.length : pharmaHistory.length;
+    const historyCount = deliveredOrders.length;
     return [
       { label: 'Alertes', value: pending, icon: IconBell, bgColor: '#fffbeb', iconColor: '#d97706', onClick: () => setActiveTab('alerts') },
       { label: 'Préparations', value: preparations, icon: IconBox, bgColor: '#ffedd5', iconColor: '#ea580c', onClick: () => setActiveTab('prep') },

@@ -1,7 +1,7 @@
 import { Card, Badge, EmptyState } from '../shared/UI';
 import { BiIcon } from '../shared/UI';
 import { useApp } from '../../context/AppContext';
-import { MOCK_PHARMA_HISTORY, STATUS } from '../../data/mockData';
+import { STATUS } from '../../data/mockData';
 
 function formatHistoryDate(isoDate) {
   if (!isoDate) return '';
@@ -28,7 +28,7 @@ export default function HistoriquePharmacie() {
         total: order.total || 0,
         meds: (order.meds || []).map(med => `${med.name} × ${med.qty || 1}`),
       }))
-    : MOCK_PHARMA_HISTORY;
+    : [];
 
   if (!history.length) {
     return <EmptyState icon={<BiIcon name="clipboard" size={40} />} title="Aucun historique" description="Les ordonnances délivrées apparaîtront ici." />;

@@ -106,9 +106,69 @@ const features = [
   },
 ];
 
+const demoAccounts = {
+  patient: {
+    role: 'patient',
+    label: 'Patient démo',
+    name: 'Patient Démo',
+    email: 'patient@ordotogo.tg',
+    password: 'demo123',
+  },
+  lumen: {
+    role: 'pharma',
+    label: 'Pharmacie Lumen',
+    name: 'Pharmacie Lumen',
+    email: 'lumen@ordotogo.tg',
+    password: 'demo123',
+  },
+};
+
 export default function AuthPage() {
   const { login } = useApp();
   const [selected, setSelected] = useState(null);
+  const [loginOpen, setLoginOpen] = useState(false);
+  const [role, setRole] = useState('patient');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loginError, setLoginError] = useState('');
+  const [demoLabel, setDemoLabel] = useState('');
+
+  const fillDemoAccount = (account) => {
+    setRole(account.role);
+    setEmail(account.email);
+    setPassword(account.password);
+    setDemoLabel(account.label);
+    setLoginError('');
+  };
+
+  const openLogin = () => {
+    setLoginError('');
+    setDemoLabel('');
+    setLoginOpen(true);
+  };
+
+  const closeLogin = () => {
+    setLoginOpen(false);
+    setLoginError('');
+    setDemoLabel('');
+  };
+
+  const handleLoginSubmit = (event) => {
+    event.preventDefault();
+
+    if (!email.trim() || !password.trim()) {
+      setLoginError('Renseignez votre mail et votre mot de passe.');
+      return;
+    }
+
+    login({
+      role,
+      email: email.trim(),
+      password,
+      displayName: role === 'pharma' ? 'Pharmacie Lumen' : 'Patient Démo',
+    });
+    closeLogin();
+  };
 
   const LogoIcon = () => (
     <svg width="26" height="26" viewBox="0 0 24 24" fill="white">
@@ -146,7 +206,26 @@ export default function AuthPage() {
         </nav>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-          <a href="#actors" style={{ textDecoration: 'none', borderRadius: '999px', padding: '10px 18px', background: 'linear-gradient(135deg, var(--green-600) 0%, var(--green-500) 100%)', boxShadow: '0 10px 24px rgba(22, 163, 74, 0.22)',color: 'var(--green-600)', fontWeight: 600, fontSize: '14px' }}>Connexion</a>
+          <button
+            type="button"
+            onClick={openLogin}
+            style={{
+              border: 'none',
+              outline: 'none',
+              borderRadius: '999px',
+              padding: '10px 18px',
+              backgroundColor: 'var(--green-800)',
+              backgroundImage: 'linear-gradient(135deg, var(--green-800) 0%, var(--green-600) 100%)',
+              boxShadow: '0 10px 24px rgba(22, 163, 74, 0.28)',
+              color: '#fff',
+              fontWeight: 600,
+              fontSize: '14px',
+              cursor: 'pointer',
+              textShadow: '0 1px 1px rgba(0, 0, 0, 0.18)',
+            }}
+          >
+            Connexion
+          </button>
         </div>
       </header>
 
@@ -172,11 +251,11 @@ export default function AuthPage() {
               </p>
 
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '14px', marginTop: '30px' }}>
-                <a href="#actors" style={{ textDecoration: 'none' }}>
+                <button type="button" onClick={openLogin} style={{ border: 'none', background: 'transparent', padding: 0, cursor: 'pointer' }}>
                   <Button size="lg" style={{ borderRadius: '14px', padding: '14px 22px', background: '#1fc889', color: '#fff', boxShadow: '0 18px 34px rgba(31, 200, 137, 0.35)' }}>
-                    Accéder à la démo →
+                    Accéder à l’espace →
                   </Button>
-                </a>
+                </button>
                 <a href="#features" style={{ textDecoration: 'none' }}>
                   <Button variant="ghost" size="lg" style={{ borderRadius: '14px', padding: '14px 22px', background: 'transparent', color: 'rgba(255,255,255,0.88)', outline: '1px solid rgba(255,255,255,0.22)' }}>
                     Voir les fonctionnalités
@@ -288,6 +367,217 @@ export default function AuthPage() {
        
       </main>
 
+      {loginOpen && (
+        <div
+          role="presentation"
+          onClick={closeLogin}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(3, 19, 16, 0.64)',
+            backdropFilter: 'blur(10px)',
+            display: 'grid',
+            placeItems: 'center',
+            padding: '20px',
+            zIndex: 50,
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Connexion"
+            onClick={(event) => event.stopPropagation()}
+            style={{
+              width: 'min(100%, 460px)',
+              borderRadius: '24px',
+              background: '#fff',
+              boxShadow: '0 30px 80px rgba(0,0,0,0.28)',
+              overflow: 'hidden',
+            }}
+          >
+            <div style={{ padding: '24px 24px 18px', background: 'linear-gradient(135deg, #063c31 0%, #0b5a48 100%)', color: '#fff' }}>
+              <div style={{ display: 'flex', alignItems: 'start', justifyContent: 'space-between', gap: '16px' }}>
+                <div>
+                  <div style={{ fontFamily: 'var(--font-display)', fontSize: '24px', fontWeight: 700, lineHeight: 1.1 }}>Connexion</div>
+                  <p style={{ marginTop: '8px', fontSize: '14px', color: 'rgba(255,255,255,0.76)', lineHeight: 1.55 }}>
+                    Entrez votre adresse mail et votre mot de passe pour accéder à votre espace.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={closeLogin}
+                  aria-label="Fermer la fenêtre de connexion"
+                  style={{
+                    width: '34px',
+                    height: '34px',
+                    borderRadius: '50%',
+                    border: 'none',
+                    background: 'rgba(255,255,255,0.12)',
+                    color: '#fff',
+                    cursor: 'pointer',
+                    fontSize: '20px',
+                    lineHeight: 1,
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+
+            <form onSubmit={handleLoginSubmit} style={{ padding: '22px 24px 24px' }}>
+              <div style={{ display: 'grid', gap: '8px', marginBottom: '16px' }}>
+                <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--gray-600)' }}>Type de compte</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '10px' }}>
+                  {[
+                    { id: 'patient', label: 'Patient' },
+                    { id: 'pharma', label: 'Pharmacien' },
+                  ].map(option => (
+                    <button
+                      key={option.id}
+                      type="button"
+                      onClick={() => setRole(option.id)}
+                      style={{
+                        borderRadius: '14px',
+                        padding: '12px 14px',
+                        border: role === option.id ? '1px solid var(--green-600)' : '1px solid var(--gray-200)',
+                        background: role === option.id ? 'var(--green-50)' : '#fff',
+                        color: role === option.id ? 'var(--green-800)' : 'var(--gray-600)',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <label style={{ display: 'grid', gap: '8px', marginBottom: '14px' }}>
+                <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--gray-600)' }}>Adresse mail</span>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  placeholder="exemple@ordotogo.tg"
+                  autoComplete="email"
+                  style={{
+                    height: '46px',
+                    borderRadius: '12px',
+                    border: '1px solid var(--gray-200)',
+                    padding: '0 14px',
+                    outline: 'none',
+                    fontSize: '15px',
+                    fontFamily: 'var(--font-body)',
+                  }}
+                />
+              </label>
+
+              <label style={{ display: 'grid', gap: '8px', marginBottom: '14px' }}>
+                <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--gray-600)' }}>Mot de passe</span>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  placeholder="Votre mot de passe"
+                  autoComplete="current-password"
+                  style={{
+                    height: '46px',
+                    borderRadius: '12px',
+                    border: '1px solid var(--gray-200)',
+                    padding: '0 14px',
+                    outline: 'none',
+                    fontSize: '15px',
+                    fontFamily: 'var(--font-body)',
+                  }}
+                />
+              </label>
+
+              {loginError && (
+                <div style={{ marginBottom: '14px', borderRadius: '12px', padding: '10px 12px', background: 'var(--coral-50)', color: 'var(--coral-600)', fontSize: '13px', fontWeight: 600 }}>
+                  {loginError}
+                </div>
+              )}
+
+              <div style={{ marginBottom: '16px', borderRadius: '16px', padding: '16px', background: 'linear-gradient(180deg, var(--gray-50) 0%, #fff 100%)', border: '1px solid var(--gray-100)' }}>
+                <div style={{ fontSize: '12px', fontWeight: 800, letterSpacing: '0.12em', color: 'var(--gray-400)', textTransform: 'uppercase', marginBottom: '12px' }}>
+                  Comptes de démonstration
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '10px' }}>
+                  {Object.values(demoAccounts).map(account => (
+                    <button
+                      key={account.email}
+                      type="button"
+                      onClick={() => fillDemoAccount(account)}
+                      style={{
+                        borderRadius: '14px',
+                        padding: '12px 14px',
+                        border: demoLabel === account.label ? '1px solid var(--green-600)' : '1px solid var(--gray-200)',
+                        background: demoLabel === account.label ? 'var(--green-50)' : '#fff',
+                        color: 'var(--gray-800)',
+                        textAlign: 'left',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <div style={{ fontSize: '14px', fontWeight: 700 }}>{account.label}</div>
+                      <div style={{ marginTop: '4px', fontSize: '12px', color: 'var(--gray-400)' }}>{account.email}</div>
+                    </button>
+                  ))}
+                </div>
+
+                <div style={{ marginTop: '12px', display: 'grid', gap: '6px', fontSize: '12px', color: 'var(--gray-600)' }}>
+                  <div><strong>Mot de passe :</strong> demo123</div>
+                  <div>Cliquer sur un compte remplit automatiquement les champs ci-dessus.</div>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gap: '10px' }}>
+                <button
+                  type="submit"
+                  style={{
+                    width: '100%',
+                    borderRadius: '999px',
+                    padding: '12px 16px',
+                    border: 'none',
+                    outline: 'none',
+                    backgroundColor: 'var(--green-800)',
+                    backgroundImage: 'linear-gradient(135deg, var(--green-800) 0%, var(--green-600) 100%)',
+                    color: '#fff',
+                    fontWeight: 700,
+                    fontSize: '15px',
+                    cursor: 'pointer',
+                    boxShadow: '0 10px 24px rgba(22, 163, 74, 0.28)',
+                    textAlign: 'center',
+                    textShadow: '0 1px 1px rgba(0, 0, 0, 0.18)',
+                  }}
+                >
+                  Se connecter
+                </button>
+
+                <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                  <button
+                    type="button"
+                    onClick={closeLogin}
+                    style={{
+                      borderRadius: '12px',
+                      padding: '12px 16px',
+                      border: '1px solid var(--gray-200)',
+                      background: '#fff',
+                      color: 'var(--gray-600)',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Annuler
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       <style>{`
         html {
           scroll-behavior: smooth;
@@ -320,6 +610,12 @@ export default function AuthPage() {
           header > div:last-child a:first-child {
             padding: 8px 14px;
             font-size: 13px;
+            white-space: nowrap;
+          }
+
+          header > div:last-child button {
+            padding: 8px 14px !important;
+            font-size: 13px !important;
             white-space: nowrap;
           }
 

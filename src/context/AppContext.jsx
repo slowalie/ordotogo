@@ -69,13 +69,37 @@ export function AppProvider({ children }) {
     return () => window.removeEventListener('storage', onStorage);
   }, []);
 
-  const login = (selectedRole) => {
+  const login = (credentialsOrRole) => {
+    const selectedRole = typeof credentialsOrRole === 'string'
+      ? credentialsOrRole
+      : credentialsOrRole?.role || 'patient';
+    const email = typeof credentialsOrRole === 'object' ? credentialsOrRole?.email || '' : '';
+    const displayName = typeof credentialsOrRole === 'object' ? credentialsOrRole?.displayName || '' : '';
+
     setRole(selectedRole);
-    setUser(
-      selectedRole === 'patient'
-        ? { name: 'Kokou Mensah', id: 'PAT-001' }
-        : { name: 'Dr Pharmacie Bénin Santé', id: 'PHAR-001', pharmacyId: 1 }
-    );
+
+    if (selectedRole === 'patient') {
+      const localPart = email.split('@')[0] || '';
+      const prettyName = localPart
+        .split(/[._-]+/)
+        .filter(Boolean)
+        .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+        .join(' ');
+
+      setUser({
+        name: displayName || prettyName || 'Kokou Mensah',
+        id: 'PAT-001',
+        email: email || 'patient@ordotogo.tg',
+      });
+      return;
+    }
+
+    setUser({
+      name: displayName || 'Pharmacie Lumen',
+      id: 'PHAR-001',
+      pharmacyId: 1,
+      email: email || 'pharmacien@ordotogo.tg',
+    });
   };
 
   const logout = () => {
