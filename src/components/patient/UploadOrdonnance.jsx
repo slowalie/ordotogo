@@ -1,7 +1,7 @@
 import { useRef } from 'react';
 import { Card, Button, BiIcon } from '../shared/UI';
 
-export default function UploadOrdonnance({ file, onFileChange, onNext }) {
+export default function UploadOrdonnance({ file, previewUrl, onFileChange, onNext }) {
   const inputRef = useRef();
 
   const handleDrop = (e) => {
@@ -20,32 +20,47 @@ export default function UploadOrdonnance({ file, onFileChange, onNext }) {
           Prenez une photo claire de votre ordonnance médicale.
         </div>
 
-        {/* Drop zone */}
-        <div
-          onDragOver={e => e.preventDefault()}
-          onDrop={handleDrop}
-          onClick={() => inputRef.current.click()}
-          className={file ? 'upload-dropzone is-filled' : 'upload-dropzone'}
-        >
-          <div className="upload-dropzone__icon">{file ? <BiIcon name="check2-circle" size={40} /> : <BiIcon name="file-earmark-text" size={40} />}</div>
-          {file ? (
-            <>
-              <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--green-700)' }}>{file.name}</div>
+        {previewUrl ? (
+          <div>
+            <div className="upload-preview-wrap">
+              <img src={previewUrl} alt="Prévisualisation ordonnance" className="upload-preview-img" />
+            </div>
+            <div style={{ marginTop: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
               <div className="upload-dropzone__subtitle">
-                {(file.size / 1024).toFixed(0)} Ko · Cliquez pour changer
+                {file?.name} · {file ? (file.size / 1024).toFixed(0) : 0} Ko
               </div>
-            </>
-          ) : (
-            <>
-              <div className="upload-dropzone__title">
-                Glissez-déposez ou cliquez pour choisir
-              </div>
-              <div className="upload-dropzone__subtitle">
-                JPG, PNG ou PDF · Max 10 Mo
-              </div>
-            </>
-          )}
-        </div>
+              <Button variant="ghost" onClick={() => inputRef.current.click()}>
+                Changer l'image
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div
+            onDragOver={e => e.preventDefault()}
+            onDrop={handleDrop}
+            onClick={() => inputRef.current.click()}
+            className={file ? 'upload-dropzone is-filled' : 'upload-dropzone'}
+          >
+            <div className="upload-dropzone__icon">{file ? <BiIcon name="check2-circle" size={40} /> : <BiIcon name="file-earmark-text" size={40} />}</div>
+            {file ? (
+              <>
+                <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--green-700)' }}>{file.name}</div>
+                <div className="upload-dropzone__subtitle">
+                  {(file.size / 1024).toFixed(0)} Ko · Cliquez pour changer
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="upload-dropzone__title">
+                  Glissez-déposez ou cliquez pour choisir
+                </div>
+                <div className="upload-dropzone__subtitle">
+                  JPG, PNG ou PDF · Max 10 Mo
+                </div>
+              </>
+            )}
+          </div>
+        )}
         <input
           ref={inputRef}
           type="file"
