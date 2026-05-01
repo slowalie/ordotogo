@@ -310,10 +310,17 @@ export default function AuthPage() {
         @media (max-width: 768px) {
           header {
             padding: 0 16px !important;
+            gap: 10px;
+          }
+
+          header > div:last-child {
+            flex-shrink: 0;
           }
 
           header > div:last-child a:first-child {
-            display: none;
+            padding: 8px 14px;
+            font-size: 13px;
+            white-space: nowrap;
           }
 
           main section {
