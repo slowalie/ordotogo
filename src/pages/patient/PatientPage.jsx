@@ -23,6 +23,7 @@ export default function PatientPage() {
     activeOrder,
     patientOrders,
     pendingOrders,
+    prepOrders,
     waitingDeliveryOrders,
     createPatientOrder,
     markOrderValidated,
@@ -125,7 +126,7 @@ export default function PatientPage() {
   const tabs = [
     { id: 'send',         label: 'Envoyer',      icon: 'send' },
     { id: 'attente',      label: 'En attente',   icon: 'hourglass-split', badge: pendingOrders.filter(o => [STATUS.PENDING, STATUS.PROCESSING, STATUS.WAITING_VALIDATION].includes(o.status)).length },
-    { id: 'valider',      label: 'Valider',      icon: 'check-circle', badge: patientOrders.filter(o => o.status === STATUS.VALIDATED).length },
+    { id: 'valider',      label: 'À valider',    icon: 'check-circle', badge: patientOrders.filter(o => o.status === STATUS.WAITING_VALIDATION).length },
     { id: 'paiement',     label: 'Paiement',     icon: 'credit-card-2-front', badge: patientOrders.filter(o => o.status === STATUS.VALIDATED).length },
     { id: 'preparation',  label: 'Préparation',  icon: 'box2', badge: patientOrders.filter(o => [STATUS.PREPARING, STATUS.READY_FOR_PICKUP].includes(o.status)).length },
     { id: 'historique',   label: 'Historique',   icon: 'journal-text' },
@@ -304,7 +305,11 @@ export default function PatientPage() {
       }
 
       case 'preparation': {
-        if (waitingDeliveryOrders.length === 0) {
+        const preparingOrders = prepOrders.filter(order => order.status === STATUS.PREPARING);
+        const readyOrders = waitingDeliveryOrders;
+        const preparationOrders = [...preparingOrders, ...readyOrders];
+
+        if (preparationOrders.length === 0) {
           return <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '14px' }}>
             Aucune ordonnance en préparation. <button onClick={() => setActiveTab('send')} style={{ color: 'var(--green-600)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--font-body)', fontSize: '14px', fontWeight: 600 }}>Envoyer une ordonnance →</button>
           </div>;
@@ -313,7 +318,7 @@ export default function PatientPage() {
           setSelectedPreparationOrderId(orderId);
           setActiveOrderId(orderId);
         };
-        return <AttentePréparation orders={waitingDeliveryOrders} selectedOrderId={selectedPreparationOrderId || activeOrder?.id} onSelectOrder={handleSelectPrepOrder} />;
+        return <AttentePréparation orders={preparationOrders} selectedOrderId={selectedPreparationOrderId || activeOrder?.id} onSelectOrder={handleSelectPrepOrder} />;
       }
 
       case 'confirmation': {

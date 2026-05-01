@@ -34,7 +34,7 @@ const IconDoc = (
 );
 
 export default function PharmacistPage() {
-  const { alerts, prepOrders, waitingDeliveryOrders, submitTranscription } = useApp();
+  const { alerts, prepOrders, waitingDeliveryOrders, patientOrders, submitTranscription } = useApp();
   const [activeTab,    setActiveTab]    = useState('alerts');
   const [selectedAlert, setSelectedAlert] = useState(null);
   const [sentSuccess,   setSentSuccess]  = useState(false);
@@ -75,11 +75,12 @@ export default function PharmacistPage() {
     { id: 'history',   label: 'Historique',   icon: 'journal-text'  },
   ];
 
-  const pharmaHistory = MOCK_PHARMA_HISTORY || [];
+  const deliveredOrders = patientOrders.filter(order => order.status === STATUS.DELIVERED);
+  const pharmaHistory = deliveredOrders.length > 0 ? deliveredOrders : MOCK_PHARMA_HISTORY || [];
   const getStats = () => {
     const pending = alerts.length;
-    const preparations = 1; // placeholder (dynamic if you track prep queue)
-    const historyCount = pharmaHistory.length;
+    const preparations = prepOrders.length;
+    const historyCount = deliveredOrders.length > 0 ? deliveredOrders.length : pharmaHistory.length;
     return [
       { label: 'Alertes', value: pending, icon: IconBell, bgColor: '#fffbeb', iconColor: '#d97706', onClick: () => setActiveTab('alerts') },
       { label: 'Préparations', value: preparations, icon: IconBox, bgColor: '#ffedd5', iconColor: '#ea580c', onClick: () => setActiveTab('prep') },

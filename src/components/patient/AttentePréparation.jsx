@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Card, Button, BiIcon, Badge } from '../shared/UI';
+import { Card, BiIcon } from '../shared/UI';
 import { PHARMACIES, STATUS } from '../../data/mockData';
 
-// Simple QR code generator - generates a URL that can be used to display the code
 function generateQRCodeURL(text) {
   const encoded = encodeURIComponent(text);
   return `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encoded}`;
@@ -10,21 +9,22 @@ function generateQRCodeURL(text) {
 
 export default function AttentePréparation({ orders = [], selectedOrderId, onSelectOrder }) {
   const [dots, setDots] = useState('');
-  
-  // Auto-select first order if none selected
+
   const activeOrderId = selectedOrderId || orders[0]?.id;
-  const selectedOrder = orders.find(o => o.id === activeOrderId) || orders[0];
-  
+  const selectedOrder = orders.find(order => order.id === activeOrderId) || orders[0];
   const pharmacy = PHARMACIES.find(p => p.id === selectedOrder?.pharmacyId) || PHARMACIES[0];
+
+  const preparingOrders = orders.filter(order => order.status === STATUS.PREPARING);
+  const readyOrders = orders.filter(order => [STATUS.READY_FOR_PICKUP, STATUS.AWAITING_DELIVERY].includes(order.status));
   const isPreparing = selectedOrder?.status === STATUS.PREPARING;
   const isReady = selectedOrder?.status === STATUS.READY_FOR_PICKUP;
 
   useEffect(() => {
-    const iv = setInterval(() => setDots(d => d.length >= 3 ? '' : d + '.'), 600);
+    const iv = setInterval(() => setDots(current => (current.length >= 3 ? '' : `${current}.`)), 600);
     return () => clearInterval(iv);
   }, []);
 
-  if (!orders || orders.length === 0) {
+  if (!orders.length) {
     return (
       <Card>
         <div style={{ textAlign: 'center', padding: '32px 16px', color: 'var(--gray-600)' }}>
@@ -35,73 +35,78 @@ export default function AttentePréparation({ orders = [], selectedOrderId, onSe
     );
   }
 
+  const renderOrderList = (title, count, list, statusColor, statusBg, statusLabel, iconName) => (
+    <Card>
+      <div style={{ fontWeight: 700, fontSize: '14px', color: statusColor, marginBottom: '12px' }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+          <BiIcon name={iconName} />
+          {title} ({count})
+        </span>
+      </div>
+      {list.length === 0 ? (
+        <div style={{ fontSize: '13px', color: 'var(--gray-600)' }}>
+          {title === 'En cours de préparation'
+            ? 'Aucune ordonnance en cours de préparation.'
+            : 'Aucune ordonnance prête pour récupération.'}
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          {list.map(order => (
+            <button
+              key={order.id}
+              onClick={() => onSelectOrder?.(order.id)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '12px',
+                border: activeOrderId === order.id ? `2px solid ${statusColor}` : '1px solid var(--gray-200)',
+                borderRadius: 'var(--radius)',
+                background: activeOrderId === order.id ? statusBg : 'transparent',
+                cursor: 'pointer',
+                transition: 'all .2s',
+                fontSize: '14px',
+              }}
+            >
+              <div style={{ textAlign: 'left', flex: 1 }}>
+                <div style={{ fontWeight: 600, color: 'var(--gray-900)', marginBottom: '2px' }}>
+                  {PHARMACIES.find(p => p.id === order.pharmacyId)?.name || 'Pharmacie'}
+                </div>
+                <div style={{ fontSize: '12px', color: 'var(--gray-600)' }}>{order.id}</div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  color: statusColor,
+                  background: statusBg,
+                  padding: '4px 8px',
+                  borderRadius: '4px',
+                }}>
+                  {statusLabel}
+                </span>
+                {activeOrderId === order.id && <BiIcon name="check-circle-fill" size={16} style={{ color: statusColor }} />}
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', animation: 'fadeIn .3s both' }}>
-      {/* List of pending preparation orders */}
-      {orders.length > 1 && (
-        <Card>
-          <div style={{ fontWeight: 700, fontSize: '14px', color: 'var(--blue-800)', marginBottom: '12px' }}>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
-              <BiIcon name="stack" />
-              {orders.length} ordonnance{orders.length > 1 ? 's' : ''} en attente de préparation
-            </span>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {orders.map(order => (
-              <button
-                key={order.id}
-                onClick={() => onSelectOrder?.(order.id)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  padding: '12px',
-                  border: activeOrderId === order.id ? '2px solid var(--blue-600)' : '1px solid var(--gray-200)',
-                  borderRadius: 'var(--radius)',
-                  background: activeOrderId === order.id ? 'rgba(59, 130, 246, 0.05)' : 'transparent',
-                  cursor: 'pointer',
-                  transition: 'all .2s',
-                  fontSize: '14px',
-                }}
-              >
-                <div style={{ textAlign: 'left', flex: 1 }}>
-                  <div style={{ fontWeight: 600, color: 'var(--gray-900)', marginBottom: '2px' }}>
-                    {PHARMACIES.find(p => p.id === order.pharmacyId)?.name || 'Pharmacie'}
-                  </div>
-                  <div style={{ fontSize: '12px', color: 'var(--gray-600)' }}>
-                    {order.id}
-                  </div>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{
-                    fontSize: '12px',
-                    fontWeight: 600,
-                    color: order.status === STATUS.PREPARING ? 'var(--orange-600)' : 'var(--green-600)',
-                    background: order.status === STATUS.PREPARING ? 'rgba(234, 179, 8, 0.1)' : 'rgba(34, 197, 94, 0.1)',
-                    padding: '4px 8px',
-                    borderRadius: '4px',
-                  }}>
-                    {order.status === STATUS.PREPARING ? 'En préparation' : 'Prêt à récupérer'}
-                  </span>
-                  {activeOrderId === order.id && <BiIcon name="check-circle-fill" size={16} style={{ color: 'var(--blue-600)' }} />}
-                </div>
-              </button>
-            ))}
-          </div>
-        </Card>
-      )}
+      {renderOrderList('En cours de préparation', preparingOrders.length, preparingOrders, 'var(--orange-600)', 'rgba(234, 88, 12, 0.06)', 'En préparation', 'gear')}
+      {renderOrderList('Prêt pour récupération', readyOrders.length, readyOrders, 'var(--green-600)', 'rgba(34, 197, 94, 0.05)', 'Prêt à récupérer', 'check2-circle')}
 
-      {/* Details for selected order */}
       {selectedOrder && (
         <>
           {isPreparing && (
             <Card className="waiting-card">
               <div className="waiting-card__spinner">
-                <div style={{ fontSize: '40px', animation: 'spin 2s linear infinite' }}>⚙️</div>
+                <div style={{ fontSize: '40px' }}>⚙️</div>
               </div>
-              <div className="waiting-card__title">
-                Préparation en cours
-              </div>
+              <div className="waiting-card__title">Préparation en cours</div>
               <div className="waiting-card__text">
                 Le pharmacien de <strong>{pharmacy.name}</strong> prépare vos médicaments{dots}
               </div>
@@ -115,9 +120,7 @@ export default function AttentePréparation({ orders = [], selectedOrderId, onSe
             <Card style={{ border: '2px solid var(--green-500)', background: 'var(--green-50)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
                 <BiIcon name="check2-circle" size={24} style={{ color: 'var(--green-600)' }} />
-                <span style={{ fontSize: '18px', fontWeight: 700, color: 'var(--green-800)' }}>
-                  Prêt à récupérer !
-                </span>
+                <span style={{ fontSize: '18px', fontWeight: 700, color: 'var(--green-800)' }}>Prêt à récupérer !</span>
               </div>
 
               <div style={{ backgroundColor: '#fff', padding: '16px', borderRadius: 'var(--radius)', marginBottom: '16px', textAlign: 'center' }}>
@@ -128,9 +131,9 @@ export default function AttentePréparation({ orders = [], selectedOrderId, onSe
                 />
               </div>
 
-              <div style={{ 
-                padding: '16px', 
-                background: 'rgba(34, 197, 94, 0.1)', 
+              <div style={{
+                padding: '16px',
+                background: 'rgba(34, 197, 94, 0.1)',
                 borderRadius: 'var(--radius)',
                 marginBottom: '16px',
                 textAlign: 'center',
@@ -139,18 +142,12 @@ export default function AttentePréparation({ orders = [], selectedOrderId, onSe
                 <div style={{ fontSize: '12px', color: 'var(--gray-600)', marginBottom: '8px', textTransform: 'uppercase', fontWeight: 600 }}>
                   Code de récupération
                 </div>
-                <div style={{ 
-                  fontSize: '32px', 
-                  fontWeight: 700, 
-                  color: 'var(--green-700)',
-                  fontFamily: 'monospace',
-                  letterSpacing: '4px'
-                }}>
+                <div style={{ fontSize: '32px', fontWeight: 700, color: 'var(--green-700)', fontFamily: 'monospace', letterSpacing: '4px' }}>
                   {selectedOrder.pickupCode}
                 </div>
               </div>
 
-              <div style={{ 
+              <div style={{
                 padding: '12px',
                 background: 'rgba(59, 130, 246, 0.1)',
                 borderRadius: 'var(--radius)',
