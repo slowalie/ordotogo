@@ -168,7 +168,7 @@ export default function AuthPage() {
               </h1>
 
               <p style={{ marginTop: '24px', maxWidth: '620px', fontSize: '18px', lineHeight: 1.7, color: 'rgba(255,255,255,0.78)' }}>
-                Finissez avec les ordonnances manuscrites illisibles, les faux médicaments et les fraudes. OrdoTogo sécurise le parcours patient de bout en bout grâce au QR Code et à la signature électronique.
+                Finis avec les ordonnances manuscrites illisibles, les faux médicaments et les fraudes. OrdoTogo sécurise le parcours patient de bout en bout grâce au QR Code et à la signature électronique.
               </p>
 
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '14px', marginTop: '30px' }}>
