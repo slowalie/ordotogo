@@ -237,7 +237,11 @@ body {
   background: var(--color-surface);
   border-bottom: 1px solid var(--color-border);
   display: flex;
-  overflow-x: auto;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px 6px;
+  padding: 8px 12px 0;
+  overflow-x: visible;
   -ms-overflow-style: none;  /* IE/Edge */
   scrollbar-width: none;     /* Firefox */
 }
@@ -245,8 +249,9 @@ body {
 .tabnav-btn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
-  padding: 0 16px;
+  padding: 0 14px;
   height: 44px;
   background: none;
   border: none;
@@ -261,6 +266,19 @@ body {
   flex-shrink: 0;
 }
 .tabnav-btn.active { border-bottom-color: var(--color-primary); color: var(--color-primary); font-weight: 700; }
+
+@media (max-width: 767px) {
+  .tabnav {
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+
+  .tabnav-btn {
+    height: 42px;
+    font-size: 12px;
+    padding: 0 12px;
+  }
+}
 
 /* Shared UI primitives */
 .ui-card {
