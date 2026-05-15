@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Card, BiIcon } from '../shared/UI';
-import { PHARMACIES, STATUS } from '../../data/mockData';
+import { STATUS } from '../../data/mockData';
 
 function formatClock(isoDate) {
   if (!isoDate) return '--:--';
@@ -17,7 +17,7 @@ function getStatusLabel(status) {
   return labels[status] || status;
 }
 
-export default function AttenteOrdonnance({ orders = [], selectedOrderId, onSelectOrder }) {
+export default function AttenteOrdonnance({ orders = [], pharmacies = [], selectedOrderId, onSelectOrder }) {
   const [dots, setDots] = useState('');
   const [now, setNow] = useState(Date.now());
   
@@ -25,7 +25,7 @@ export default function AttenteOrdonnance({ orders = [], selectedOrderId, onSele
   const activeOrderId = selectedOrderId || orders[0]?.id;
   const selectedOrder = orders.find(o => o.id === activeOrderId) || orders[0];
   
-  const pharmacy = PHARMACIES.find(p => p.id === selectedOrder?.pharmacyId) || PHARMACIES[0];
+  const pharmacy = pharmacies.find(p => p.id === selectedOrder?.pharmacyId) || selectedOrder || null;
   const isAnalyzing = selectedOrder?.status === STATUS.PENDING || selectedOrder?.status === STATUS.PROCESSING;
 
   const elapsedMinutes = useMemo(() => {
@@ -91,7 +91,7 @@ export default function AttenteOrdonnance({ orders = [], selectedOrderId, onSele
               >
                 <div style={{ textAlign: 'left', flex: 1 }}>
                   <div style={{ fontWeight: 600, color: 'var(--gray-900)', marginBottom: '2px' }}>
-                    {PHARMACIES.find(p => p.id === order.pharmacyId)?.name || 'Pharmacie'}
+                    {order.pharmacyName || pharmacies.find(p => p.id === order.pharmacyId)?.name || 'Pharmacie'}
                   </div>
                   <div style={{ fontSize: '12px', color: 'var(--gray-600)' }}>
                     Envoyée à {formatClock(order.sentAt)}
@@ -133,7 +133,7 @@ export default function AttenteOrdonnance({ orders = [], selectedOrderId, onSele
               {isAnalyzing ? 'Ordonnance envoyée' : 'Transcription en cours'}
             </div>
             <div className="waiting-card__text">
-              Votre ordonnance est bien reçue par <strong>{pharmacy.name}</strong>.
+              Votre ordonnance est bien reçue par <strong>{pharmacy?.name || selectedOrder?.pharmacyName || 'la pharmacie choisie'}</strong>.
               Le pharmacien est en train de retranscrire l'ordonnance{dots}
             </div>
             <div className="waiting-pill">
@@ -190,15 +190,15 @@ export default function AttenteOrdonnance({ orders = [], selectedOrderId, onSele
             <div className="info-grid">
               <div className="info-grid__row">
                 <span className="info-grid__label">Nom</span>
-                <span className="info-grid__value">{pharmacy.name}</span>
+                <span className="info-grid__value">{pharmacy?.name || selectedOrder?.pharmacyName || 'Pharmacie'}</span>
               </div>
               <div className="info-grid__row">
                 <span className="info-grid__label">Zone</span>
-                <span>{pharmacy.zone}</span>
+                <span>{pharmacy?.zone || selectedOrder?.pharmacyZone || '—'}</span>
               </div>
               <div className="info-grid__row">
                 <span className="info-grid__label">Distance</span>
-                <span>{pharmacy.dist}</span>
+                <span>{pharmacy?.dist || '—'}</span>
               </div>
               <div className="info-grid__row">
                 <span className="info-grid__label">Délai estimé</span>

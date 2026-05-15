@@ -1,7 +1,7 @@
 import { Card, Badge, EmptyState } from '../shared/UI';
 import { BiIcon } from '../shared/UI';
 import { useApp } from '../../context/AppContext';
-import { MOCK_PATIENT_HISTORY, STATUS } from '../../data/mockData';
+import { STATUS } from '../../data/mockData';
 
 function formatHistoryDate(isoDate) {
   if (!isoDate) return '';
@@ -19,16 +19,14 @@ export default function HistoriquePatient() {
     .filter(order => order.status === STATUS.DELIVERED)
     .sort((a, b) => new Date(b.deliveredAt || b.updatedAt || b.sentAt) - new Date(a.deliveredAt || a.updatedAt || a.sentAt));
 
-  const history = deliveredOrders.length > 0
-    ? deliveredOrders.map(order => ({
-        id: order.id,
-        pharmacy: order.pharmacyName,
-        date: formatHistoryDate(order.deliveredAt || order.updatedAt || order.sentAt),
-        status: order.status,
-        total: order.total || 0,
-        meds: (order.meds || []).map(med => med.name),
-      }))
-    : MOCK_PATIENT_HISTORY;
+  const history = deliveredOrders.map(order => ({
+    id: order.id,
+    pharmacy: order.pharmacyName,
+    date: formatHistoryDate(order.deliveredAt || order.updatedAt || order.sentAt),
+    status: order.status,
+    total: order.total || 0,
+    meds: (order.meds || []).map(med => med.name),
+  }));
 
   if (!history.length) {
     return <EmptyState icon={<BiIcon name="clipboard" size={40} />} title="Aucune ordonnance" description="Vos ordonnances passées apparaîtront ici." />;

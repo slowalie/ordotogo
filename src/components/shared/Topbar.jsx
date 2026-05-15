@@ -9,6 +9,12 @@ const Logo = () => (
 
 export default function Topbar({ notifCount = 0 }) {
   const { role, user, logout } = useApp();
+  const pharmacyName = user?.pharmacyName || user?.ownedPharmacy?.name || '';
+  const workspaceLabel = role === 'pharmacist' && pharmacyName
+    ? `Espace ${pharmacyName}`
+    : role === 'patient'
+      ? 'Espace Patient'
+      : 'Espace Pharmacien';
 
   return (
     <header className="app-topbar topbar">
@@ -22,7 +28,7 @@ export default function Topbar({ notifCount = 0 }) {
             OrdoTogo
           </div>
           <div className="brand-subtitle">
-            {role === 'patient' ? 'Espace Patient' : 'Espace Pharmacien'}
+            {workspaceLabel}
           </div>
         </div>
       </div>

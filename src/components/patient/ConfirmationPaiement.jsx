@@ -1,9 +1,8 @@
 import { Card, Button, BiIcon } from '../shared/UI';
-import { PHARMACIES } from '../../data/mockData';
 
-export default function ConfirmationPaiement({ method, pharmacyId, onReset }) {
-  const pharmacy = PHARMACIES.find(p => p.id === pharmacyId) || PHARMACIES[0];
-  const ordCode  = `ORD-${Math.floor(1000 + Math.random() * 9000)}`;
+export default function ConfirmationPaiement({ method, order, onReset }) {
+  const pharmacyName = order?.pharmacyName || 'la pharmacie choisie';
+  const ordCode = order?.pickupCode || '';
   const isMixx   = method === 'mixx';
 
   return (
@@ -22,32 +21,37 @@ export default function ConfirmationPaiement({ method, pharmacyId, onReset }) {
         </div>
         <div style={{ fontSize: '14px', color: 'var(--color-text-secondary)', marginBottom: '24px', lineHeight: 1.7 }}>
           {isMixx
-            ? `Votre ordonnance est en cours de préparation à ${pharmacy.name}. Présentez le QR code ci-dessous lors du retrait.`
-            : `Rendez-vous à ${pharmacy.name} pour récupérer et régler vos médicaments.`}
+            ? `Votre ordonnance est en cours de préparation à ${pharmacyName}. Présentez le QR code ci-dessous lors du retrait.`
+            : `Rendez-vous à ${pharmacyName} pour récupérer et régler vos médicaments.`}
         </div>
 
-        {/* QR Code placeholder */}
-        <div style={{
-          display:        'inline-block',
-          background:     'var(--gray-50)',
-          border:         '1px solid var(--color-border)',
-          borderRadius:   'var(--radius-md)',
-          padding:        '20px 32px',
-          marginBottom:   '12px',
-        }}>
+        {ordCode ? (
           <div style={{
-            fontFamily:    'monospace',
-            fontSize:      '22px',
-            fontWeight:    700,
-            color:         'var(--green-800)',
-            letterSpacing: '4px',
+            display:        'inline-block',
+            background:     'var(--gray-50)',
+            border:         '1px solid var(--color-border)',
+            borderRadius:   'var(--radius-md)',
+            padding:        '20px 32px',
+            marginBottom:   '12px',
           }}>
-            {ordCode}
+            <div style={{
+              fontFamily:    'monospace',
+              fontSize:      '22px',
+              fontWeight:    700,
+              color:         'var(--green-800)',
+              letterSpacing: '4px',
+            }}>
+              {ordCode}
+            </div>
+            <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginTop: '6px' }}>
+              Code à présenter en pharmacie
+            </div>
           </div>
-          <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginTop: '6px' }}>
-            Code à présenter en pharmacie
+        ) : (
+          <div style={{ fontSize: '13px', color: 'var(--color-text-muted)', marginBottom: '12px' }}>
+            Le code de retrait sera généré quand la pharmacie finalisera la préparation.
           </div>
-        </div>
+        )}
       </Card>
 
       {/* Steps */}
@@ -56,8 +60,8 @@ export default function ConfirmationPaiement({ method, pharmacyId, onReset }) {
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}><BiIcon name={isMixx ? 'box-seam' : 'shop'} />{isMixx ? 'Récupérer ma commande' : 'Se rendre en pharmacie'}</span>
         </div>
         {(isMixx
-          ? ['Le pharmacien prépare vos médicaments', 'Vous recevrez une notification quand c\'est prêt', `Présentez le code ${ordCode} à la pharmacie`]
-          : [`Rendez-vous à ${pharmacy.name}`, 'Présentez ce code au pharmacien', 'Récupérez et réglez vos médicaments sur place']
+          ? ['Le pharmacien prépare vos médicaments', 'Vous recevrez une notification quand c\'est prêt', ordCode ? `Présentez le code ${ordCode} à la pharmacie` : 'Récupérez le code quand la préparation est terminée']
+          : [`Rendez-vous à ${pharmacyName}`, ordCode ? 'Présentez ce code au pharmacien' : 'Présentez le message de confirmation au pharmacien', 'Récupérez et réglez vos médicaments sur place']
         ).map((step, i) => (
           <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', marginBottom: '8px' }}>
             <div style={{

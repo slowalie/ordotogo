@@ -1,30 +1,42 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Card, Button, Input, Textarea, Select, Divider, Avatar, BiIcon } from '../shared/UI';
 import { DRUG_DATABASE } from '../../data/mockData';
 
-const drugOptions = DRUG_DATABASE.map(d => ({ value: d.id, label: `${d.name} — ${d.price.toLocaleString()} FCFA` }));
+function getDrugOptions(drugs) {
+  if (!Array.isArray(drugs) || drugs.length === 0) {
+    return DRUG_DATABASE.map(d => ({ value: d.id, label: `${d.name} — ${d.price.toLocaleString()} FCFA` }));
+  }
+  return drugs.map(d => ({ value: d.id, label: `${d.name} — ${d.price_xof.toLocaleString()} FCFA` }));
+}
 
 const defaultMed = () => ({ drugId: '', qty: '1', duree: '7j', posologie: '' });
 
-export default function CreerOrdonnance({ alert, onSend, onBack }) {
+export default function CreerOrdonnance({ alert, drugs = [], onSend, onBack }) {
   const [meds,    setMeds]    = useState([defaultMed()]);
   const [conseil, setConseil] = useState('');
   const [sending, setSending] = useState(false);
+  const drugOptions = useMemo(() => getDrugOptions(drugs), [drugs]);
 
   const addMed    = () => setMeds(m => [...m, defaultMed()]);
   const removeMed = (i) => setMeds(m => m.filter((_, idx) => idx !== i));
   const updateMed = (i, field, val) => setMeds(m => m.map((med, idx) => idx === i ? { ...med, [field]: val } : med));
 
+  const getDrugDatabase = () => drugs.length > 0 ? drugs : DRUG_DATABASE;
+
   const validMeds = meds.filter(m => m.drugId && m.qty);
   const total = validMeds.reduce((s, m) => {
-    const drug = DRUG_DATABASE.find(d => d.id === m.drugId);
-    return s + (drug ? drug.price * parseInt(m.qty || 1) : 0);
+    const db = getDrugDatabase();
+    const drug = db.find(d => d.id === m.drugId);
+    const price = drug ? (drugs.length > 0 ? drug.price_xof : drug.price) : 0;
+    return s + (price * parseInt(m.qty || 1));
   }, 0);
 
   const handleSend = () => {
+    const db = getDrugDatabase();
     const medsPayload = validMeds.map((med, index) => {
-      const drug = DRUG_DATABASE.find(d => d.id === med.drugId);
+      const drug = db.find(d => d.id === med.drugId);
       const qty = parseInt(med.qty || 1, 10);
+      const price = drug ? (drugs.length > 0 ? drug.price_xof : drug.price) : 0;
       return {
         id: `${med.drugId}-${index + 1}`,
         drugId: med.drugId,
@@ -32,7 +44,7 @@ export default function CreerOrdonnance({ alert, onSend, onBack }) {
         qty,
         duree: med.duree,
         posologie: med.posologie || `Durée: ${med.duree}`,
-        price: (drug?.price || 0) * qty,
+        price: price * qty,
       };
     });
 
@@ -83,6 +95,8 @@ export default function CreerOrdonnance({ alert, onSend, onBack }) {
               key={i}
               index={i}
               med={med}
+              drugs={drugs}
+              drugOptions={drugOptions}
               onUpdate={(f, v) => updateMed(i, f, v)}
               onRemove={() => removeMed(i)}
               canRemove={meds.length > 1}
@@ -123,12 +137,14 @@ export default function CreerOrdonnance({ alert, onSend, onBack }) {
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}><BiIcon name="receipt" />Récapitulatif de l'ordonnance</span>
           </div>
           {validMeds.map((m, i) => {
-            const drug = DRUG_DATABASE.find(d => d.id === m.drugId);
+            const db = getDrugDatabase();
+            const drug = db.find(d => d.id === m.drugId);
             if (!drug) return null;
+            const price = drugs.length > 0 ? drug.price_xof : drug.price;
             return (
               <div key={i} className="pharma-summary-row">
                 <span style={{ color: 'var(--color-text-secondary)' }}>{drug.name} × {m.qty}</span>
-                <span>{(drug.price * parseInt(m.qty || 1)).toLocaleString()} FCFA</span>
+                <span>{(price * parseInt(m.qty || 1)).toLocaleString()} FCFA</span>
               </div>
             );
           })}
@@ -155,8 +171,11 @@ export default function CreerOrdonnance({ alert, onSend, onBack }) {
   );
 }
 
-function MedRow({ index, med, onUpdate, onRemove, canRemove }) {
-  const drug = DRUG_DATABASE.find(d => d.id === med.drugId);
+function MedRow({ index, med, drugs = [], drugOptions, onUpdate, onRemove, canRemove }) {
+  const getDrugDatabase = () => drugs.length > 0 ? drugs : DRUG_DATABASE;
+  const db = getDrugDatabase();
+  const drug = db.find(d => d.id === med.drugId);
+  const price = drug ? (drugs.length > 0 ? drug.price_xof : drug.price) : 0;
 
   return (
     <div className="pharma-med-card">
@@ -185,7 +204,7 @@ function MedRow({ index, med, onUpdate, onRemove, canRemove }) {
 
       {drug && (
         <div style={{ fontSize: '11px', color: 'var(--green-600)', marginTop: '4px', fontWeight: 600 }}>
-          {drug.category} · {drug.price.toLocaleString()} FCFA/unité
+          {drugs.length > 0 ? drug.category : drug.category} · {price.toLocaleString()} FCFA/unité
         </div>
       )}
 

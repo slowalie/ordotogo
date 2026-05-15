@@ -1,18 +1,18 @@
 import { useEffect, useState } from 'react';
 import { Card, BiIcon } from '../shared/UI';
-import { PHARMACIES, STATUS } from '../../data/mockData';
+import { STATUS } from '../../data/mockData';
 
 function generateQRCodeURL(text) {
   const encoded = encodeURIComponent(text);
   return `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encoded}`;
 }
 
-export default function AttentePréparation({ orders = [], selectedOrderId, onSelectOrder }) {
+export default function AttentePréparation({ orders = [], pharmacies = [], selectedOrderId, onSelectOrder }) {
   const [dots, setDots] = useState('');
 
   const activeOrderId = selectedOrderId || orders[0]?.id;
   const selectedOrder = orders.find(order => order.id === activeOrderId) || orders[0];
-  const pharmacy = PHARMACIES.find(p => p.id === selectedOrder?.pharmacyId) || PHARMACIES[0];
+  const pharmacy = pharmacies.find(p => p.id === selectedOrder?.pharmacyId) || selectedOrder || null;
 
   const preparingOrders = orders.filter(order => order.status === STATUS.PREPARING);
   const readyOrders = orders.filter(order => [STATUS.READY_FOR_PICKUP, STATUS.AWAITING_DELIVERY].includes(order.status));
@@ -70,7 +70,7 @@ export default function AttentePréparation({ orders = [], selectedOrderId, onSe
             >
               <div style={{ textAlign: 'left', flex: 1 }}>
                 <div style={{ fontWeight: 600, color: 'var(--gray-900)', marginBottom: '2px' }}>
-                  {PHARMACIES.find(p => p.id === order.pharmacyId)?.name || 'Pharmacie'}
+                  {order.pharmacyName || pharmacies.find(p => p.id === order.pharmacyId)?.name || 'Pharmacie'}
                 </div>
                 <div style={{ fontSize: '12px', color: 'var(--gray-600)' }}>{order.id}</div>
               </div>
@@ -108,7 +108,7 @@ export default function AttentePréparation({ orders = [], selectedOrderId, onSe
               </div>
               <div className="waiting-card__title">Préparation en cours</div>
               <div className="waiting-card__text">
-                Le pharmacien de <strong>{pharmacy.name}</strong> prépare vos médicaments{dots}
+                Le pharmacien de <strong>{pharmacy?.name || selectedOrder?.pharmacyName || 'la pharmacie choisie'}</strong> prépare vos médicaments{dots}
               </div>
               <div className="waiting-pill">
                 <BiIcon name="hourglass-split" size={13} /> Traitement en cours

@@ -13,7 +13,8 @@ import ValidationOrdonnance from '../../components/patient/ValidationOrdonnance'
 import PaiementOrdonnance   from '../../components/patient/PaiementOrdonnance';
 import ConfirmationPaiement from '../../components/patient/ConfirmationPaiement';
 import HistoriquePatient    from '../../components/patient/HistoriquePatient';
-import { PHARMACIES, STATUS, MOCK_PATIENT_HISTORY } from '../../data/mockData';
+import { STATUS } from '../../data/mockData';
+import { fetchPharmacies } from '../../services/supabaseApi';
 
 // Send flow steps
 const SEND_STEPS = ['Photo', 'Pharmacie', 'Envoi'];
@@ -36,6 +37,8 @@ export default function PatientPage() {
   const [file,       setFile]       = useState(null);
   const [previewUrl, setPreviewUrl] = useState('');
   const [pharmacyId, setPharmacyId] = useState(null);
+  const [pharmacies, setPharmacies] = useState([]);
+  const [pharmaciesLoading, setPharmaciesLoading] = useState(false);
   const [accepted,   setAccepted]   = useState({});
   const [payMethod,  setPayMethod]  = useState(null);
   const [selectedWaitingOrderId, setSelectedWaitingOrderId] = useState(null);
@@ -70,23 +73,60 @@ export default function PatientPage() {
     setPayMethod(null);
   }, [activeOrder?.id]);
 
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadPharmacies = async () => {
+      setPharmaciesLoading(true);
+
+      try {
+        const { data } = await fetchPharmacies();
+        if (!isMounted) return;
+
+        setPharmacies((data || []).map(pharmacy => ({
+          id: pharmacy.id,
+          name: pharmacy.name,
+          zone: pharmacy.zone || '',
+          phone: pharmacy.phone || '',
+          address: pharmacy.address || '',
+          open: Boolean(pharmacy.is_open),
+        })));
+      } finally {
+        if (isMounted) {
+          setPharmaciesLoading(false);
+        }
+      }
+    };
+
+    loadPharmacies();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   const handleFileChange = (f) => setFile(f);
 
-  const handleSend = () => {
-    const pharmacy = PHARMACIES.find(ph => ph.id === pharmacyId);
+  const handleSend = async () => {
+    const pharmacy = pharmacies.find(ph => ph.id === pharmacyId);
     if (!file || !pharmacy) return;
 
-    createPatientOrder({
-      file,
-      previewUrl,
-      pharmacy,
-    });
+    setSendStep(2); // Envoi en cours / en attente
+
+    const createdId = await createPatientOrder({ file, previewUrl, pharmacy });
 
     // Réinitialiser le formulaire pour permettre une nouvelle ordonnance
-    setSendStep(0);
     setFile(null);
     setPreviewUrl('');
     setPharmacyId(null);
+
+    if (createdId) {
+      // L'ordre a été créé côté serveur; garder l'utilisateur sur l'onglet En attente
+      setActiveTab('attente');
+    } else {
+      // Erreur silencieuse pour l'instant — on revient au pas 0
+      setSendStep(0);
+    }
   };
 
   const toggleMed = (id) => {
@@ -132,7 +172,6 @@ export default function PatientPage() {
     { id: 'historique',   label: 'Historique',   icon: 'journal-text' },
   ];
 
-  const patientHistory = MOCK_PATIENT_HISTORY || [];
   const getStats = () => {
     const attenteOrders = pendingOrders.filter(o => [STATUS.PENDING, STATUS.PROCESSING, STATUS.WAITING_VALIDATION].includes(o.status));
     const validatedOrders = patientOrders.filter(o => o.status === STATUS.VALIDATED);
@@ -179,6 +218,8 @@ export default function PatientPage() {
             )}
             {sendStep === 1 && (
               <ChoixPharmacie
+                pharmacies={pharmacies}
+                loading={pharmaciesLoading}
                 selected={pharmacyId}
                 onSelect={setPharmacyId}
                 onSend={handleSend}
@@ -200,7 +241,7 @@ export default function PatientPage() {
           setSelectedWaitingOrderId(orderId);
           setActiveOrderId(orderId);
         };
-        return <AttenteOrdonnance orders={attenteOrders} selectedOrderId={selectedWaitingOrderId || activeOrder?.id} onSelectOrder={handleSelectOrder} />;
+        return <AttenteOrdonnance orders={attenteOrders} pharmacies={pharmacies} selectedOrderId={selectedWaitingOrderId || activeOrder?.id} onSelectOrder={handleSelectOrder} />;
       }
 
       case 'valider': {
@@ -318,7 +359,7 @@ export default function PatientPage() {
           setSelectedPreparationOrderId(orderId);
           setActiveOrderId(orderId);
         };
-        return <AttentePréparation orders={preparationOrders} selectedOrderId={selectedPreparationOrderId || activeOrder?.id} onSelectOrder={handleSelectPrepOrder} />;
+        return <AttentePréparation orders={preparationOrders} pharmacies={pharmacies} selectedOrderId={selectedPreparationOrderId || activeOrder?.id} onSelectOrder={handleSelectPrepOrder} />;
       }
 
       case 'confirmation': {
@@ -332,7 +373,7 @@ export default function PatientPage() {
         const selectedOrder = paidOrders.find(o => o.id === activeOrder?.id) || paidOrders[0];
         if (!selectedOrder) return null;
         
-        return <ConfirmationPaiement method={payMethod || selectedOrder?.paymentMethod} pharmacyId={selectedOrder.pharmacyId} onReset={() => {
+        return <ConfirmationPaiement method={payMethod || selectedOrder?.paymentMethod} order={selectedOrder} onReset={() => {
           handleReset();
           setActiveTab('send');
         }} />;

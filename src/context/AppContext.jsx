@@ -1,5 +1,17 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { STATUS } from '../data/mockData';
+import {
+  getCurrentSession,
+  onAuthStateChange,
+  resolveUserWorkspace,
+  signInWithPassword,
+  signOut as supabaseSignOut,
+  createPatientOrder as apiCreatePatientOrder,
+  fetchWorkspaceSnapshot,
+  createSignedUrlsForPaths,
+  subscribeToWorkspaceChanges,
+} from '../services/supabaseApi';
+import { isSupabaseConfigured } from '../lib/supabaseClient';
 
 const AppContext = createContext(null);
 const STORAGE_KEY = 'ordotogo_app_state_v1';
@@ -20,10 +32,82 @@ function readPersistedState() {
   }
 }
 
+function toDisplayName(profile, email) {
+  if (profile?.display_name) return profile.display_name;
+
+  const localPart = String(email || '').split('@')[0] || '';
+  const prettyName = localPart
+    .split(/[._-]+/)
+    .filter(Boolean)
+    .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+
+  return prettyName || 'Utilisateur';
+}
+
+async function loadWorkspaceForUser(sessionUser) {
+  if (!sessionUser) {
+    return {
+      role: null,
+      user: null,
+      ownedPharmacy: null,
+    };
+  }
+
+  const { data: workspace } = await resolveUserWorkspace();
+
+  const profile = workspace?.profile || null;
+  const ownedPharmacy = workspace?.ownedPharmacy || null;
+  const resolvedRole = workspace?.role === 'pharmacist' ? 'pharmacist' : 'patient';
+  const email = sessionUser.email || '';
+
+  return {
+    role: resolvedRole,
+    ownedPharmacy,
+    user: {
+      id: sessionUser.id,
+      email,
+      name: toDisplayName(profile, email),
+      role: resolvedRole,
+      pharmacyId: ownedPharmacy?.id || null,
+      pharmacyName: ownedPharmacy?.name || null,
+      profile,
+      ownedPharmacy,
+    },
+  };
+}
+
+async function loadWorkspaceOrders() {
+  if (!isSupabaseConfigured) {
+    return [];
+  }
+
+  const { data } = await fetchWorkspaceSnapshot();
+  return Array.isArray(data?.orders) ? data.orders : [];
+}
+
+async function refreshOrderPreviews(orders) {
+  if (!Array.isArray(orders) || orders.length === 0) {
+    return orders || [];
+  }
+
+  const signedUrlsByPath = await createSignedUrlsForPaths(
+    orders.map(order => order.prescriptionFilePath).filter(Boolean)
+  );
+
+  return orders.map(order => ({
+    ...order,
+    prescriptionPreview: signedUrlsByPath[order.prescriptionFilePath] || order.prescriptionPreview || '',
+  }));
+}
+
 export function AppProvider({ children }) {
   const persisted = readPersistedState();
-  const [role, setRole]           = useState(persisted?.role || null); // 'patient' | 'pharma'
-  const [user, setUser]           = useState(persisted?.user || null);
+  const [role, setRole] = useState(isSupabaseConfigured ? null : persisted?.role || null);
+  const [user, setUser] = useState(isSupabaseConfigured ? null : persisted?.user || null);
+  const [ownedPharmacy, setOwnedPharmacy] = useState(null);
+  const [authReady, setAuthReady] = useState(!isSupabaseConfigured);
+  const [authError, setAuthError] = useState('');
 
   // ── Patient state ──
   const [patientOrders, setPatientOrders] = useState(persisted?.patientOrders || []);
@@ -41,6 +125,93 @@ export function AppProvider({ children }) {
       // Ignore storage write failures.
     }
   }, [role, user, patientOrders, activeOrderId]);
+
+  useEffect(() => {
+    if (!isSupabaseConfigured) {
+      setAuthReady(true);
+      return undefined;
+    }
+
+    let isMounted = true;
+
+    const syncSession = async (sessionUser) => {
+      setAuthReady(false);
+      setAuthError('');
+
+      try {
+        const [workspace, orders] = await Promise.all([
+          loadWorkspaceForUser(sessionUser),
+          loadWorkspaceOrders(),
+        ]);
+        if (!isMounted) return;
+
+        const normalizedOrders = await refreshOrderPreviews(orders);
+        if (!isMounted) return;
+        const fallbackOrders = Array.isArray(persisted?.patientOrders) ? persisted.patientOrders : [];
+        const nextOrders = normalizedOrders.length > 0
+          ? normalizedOrders
+          : await refreshOrderPreviews(fallbackOrders);
+
+        setRole(workspace.role);
+        setUser(workspace.user);
+        setOwnedPharmacy(workspace.ownedPharmacy);
+        setPatientOrders(nextOrders.length > 0 ? nextOrders : []);
+        setActiveOrderId(currentActiveOrderId => {
+          if (currentActiveOrderId && nextOrders.some(order => order.id === currentActiveOrderId)) {
+            return currentActiveOrderId;
+          }
+          return nextOrders[0]?.id || currentActiveOrderId || null;
+        });
+      } catch (error) {
+        if (!isMounted) return;
+
+        setRole(null);
+        setUser(null);
+        setOwnedPharmacy(null);
+        setAuthError(error?.message || 'Impossible de charger votre espace.');
+      } finally {
+        if (isMounted) {
+          setAuthReady(true);
+        }
+      }
+    };
+
+    getCurrentSession().then(({ data }) => {
+      if (!isMounted) return;
+      syncSession(data?.session?.user || null);
+    });
+
+    const { data } = onAuthStateChange((_event, session) => {
+      syncSession(session?.user || null);
+    });
+
+    const workspaceSubscription = subscribeToWorkspaceChanges((payload) => {
+      if (payload?.schema !== 'public') return;
+      if (!['orders', 'order_items', 'pharmacies', 'profiles'].includes(payload.table)) return;
+      if (!isMounted) return;
+
+      loadWorkspaceOrders().then((orders) => {
+        if (!isMounted) return;
+
+        refreshOrderPreviews(orders).then((normalizedOrders) => {
+          if (!isMounted) return;
+          setPatientOrders(prevOrders => (normalizedOrders.length > 0 ? normalizedOrders : prevOrders));
+          setActiveOrderId(currentActiveOrderId => {
+            if (currentActiveOrderId && normalizedOrders.some(order => order.id === currentActiveOrderId)) {
+              return currentActiveOrderId;
+            }
+            return normalizedOrders[0]?.id || currentActiveOrderId || null;
+          });
+        });
+      });
+    });
+
+    return () => {
+      isMounted = false;
+      data?.subscription?.unsubscribe?.();
+      workspaceSubscription?.unsubscribe?.();
+    };
+  }, []);
 
   useEffect(() => {
     const onStorage = (event) => {
@@ -69,74 +240,153 @@ export function AppProvider({ children }) {
     return () => window.removeEventListener('storage', onStorage);
   }, []);
 
-  const login = (credentialsOrRole) => {
-    const selectedRole = typeof credentialsOrRole === 'string'
-      ? credentialsOrRole
-      : credentialsOrRole?.role || 'patient';
-    const email = typeof credentialsOrRole === 'object' ? credentialsOrRole?.email || '' : '';
-    const displayName = typeof credentialsOrRole === 'object' ? credentialsOrRole?.displayName || '' : '';
+  const login = async (credentialsOrRole) => {
+    if (!isSupabaseConfigured) {
+      const selectedRole = typeof credentialsOrRole === 'string'
+        ? credentialsOrRole
+        : credentialsOrRole?.role || 'patient';
+      const email = typeof credentialsOrRole === 'object' ? credentialsOrRole?.email || '' : '';
+      const displayName = typeof credentialsOrRole === 'object' ? credentialsOrRole?.displayName || '' : '';
 
-    setRole(selectedRole);
+      setRole(selectedRole === 'pharma' ? 'pharmacist' : selectedRole);
 
-    if (selectedRole === 'patient') {
-      const localPart = email.split('@')[0] || '';
-      const prettyName = localPart
-        .split(/[._-]+/)
-        .filter(Boolean)
-        .map(part => part.charAt(0).toUpperCase() + part.slice(1))
-        .join(' ');
+      if (selectedRole === 'patient') {
+        const localPart = email.split('@')[0] || '';
+        const prettyName = localPart
+          .split(/[._-]+/)
+          .filter(Boolean)
+          .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+          .join(' ');
+
+        setUser({
+          name: displayName || prettyName || 'Kokou Mensah',
+          id: 'PAT-001',
+          email: email || 'patient@ordotogo.tg',
+          role: 'patient',
+        });
+        return { error: null };
+      }
 
       setUser({
-        name: displayName || prettyName || 'Kokou Mensah',
-        id: 'PAT-001',
-        email: email || 'patient@ordotogo.tg',
+        name: displayName || 'Pharmacie Lumen',
+        id: 'PHAR-001',
+        pharmacyId: 1,
+        email: email || 'pharmacien@ordotogo.tg',
+        role: 'pharmacist',
       });
-      return;
+      return { error: null };
     }
 
-    setUser({
-      name: displayName || 'Pharmacie Lumen',
-      id: 'PHAR-001',
-      pharmacyId: 1,
-      email: email || 'pharmacien@ordotogo.tg',
-    });
+    const email = typeof credentialsOrRole === 'object' ? credentialsOrRole?.email || '' : '';
+    const password = typeof credentialsOrRole === 'object' ? credentialsOrRole?.password || '' : '';
+
+    if (!email.trim() || !password.trim()) {
+      const error = new Error('Renseignez votre mail et votre mot de passe.');
+      setAuthError(error.message);
+      return { error };
+    }
+
+    setAuthError('');
+    const { error } = await signInWithPassword(email.trim(), password);
+
+    if (error) {
+      setAuthError(error.message || 'Connexion impossible.');
+      return { error };
+    }
+
+    return { error: null };
   };
 
-  const logout = () => {
+  const logout = async () => {
+    setAuthError('');
+
+    if (isSupabaseConfigured) {
+      await supabaseSignOut();
+    }
+
     setRole(null);
     setUser(null);
+    setOwnedPharmacy(null);
     setActiveOrderId(null);
   };
 
-  const createPatientOrder = ({ file, previewUrl, pharmacy }) => {
+  const createPatientOrder = async ({ file, previewUrl, pharmacy }) => {
     if (!pharmacy) return null;
 
-    const id = `ORD-${Date.now()}`;
-    const now = new Date().toISOString();
-    const order = {
-      id,
-      patientName: user?.name || 'Patient',
-      patientId: user?.id || 'PAT-000',
-      pharmacyId: pharmacy.id,
-      pharmacyName: pharmacy.name,
-      prescriptionFileName: file?.name || 'ordonnance.jpg',
-      prescriptionFileSize: file?.size || 0,
-      prescriptionPreview: previewUrl || '',
-      status: STATUS.PENDING,
-      meds: [],
-      conseil: '',
-      total: 0,
-      paymentMethod: null,
-      sentAt: now,
-      updatedAt: now,
-      pickupCode: null,        // Code de récupération (6 chiffres)
-      qrCode: null,             // QR code data
-      readyAt: null,            // Quand la préparation est terminée
-    };
+    if (!isSupabaseConfigured) {
+      // Fallback to local optimistic behavior when Supabase isn't configured
+      const id = `ORD-${Date.now()}`;
+      const now = new Date().toISOString();
+      const order = {
+        id,
+        patientName: user?.name || 'Patient',
+        patientId: user?.id || 'PAT-000',
+        pharmacyId: pharmacy.id,
+        pharmacyName: pharmacy.name,
+        prescriptionFileName: file?.name || 'ordonnance.jpg',
+        prescriptionFileSize: file?.size || 0,
+        prescriptionPreview: previewUrl || '',
+        status: STATUS.PENDING,
+        meds: [],
+        conseil: '',
+        total: 0,
+        paymentMethod: null,
+        sentAt: now,
+        updatedAt: now,
+        pickupCode: null,
+        qrCode: null,
+        readyAt: null,
+      };
 
-    setPatientOrders(prev => [order, ...prev]);
-    setActiveOrderId(id);
-    return id;
+      setPatientOrders(prev => [order, ...prev]);
+      setActiveOrderId(id);
+      return id;
+    }
+
+    try {
+      const userId = user?.id;
+      const { data, error } = await apiCreatePatientOrder({ userId, pharmacyId: pharmacy.id, file, previewUrl });
+      if (error) {
+        throw error;
+      }
+
+      const createdOrderId = data?.orderId;
+      const previewMap = await createSignedUrlsForPaths([data?.filePath].filter(Boolean));
+      const previewUrlFromStorage = data?.filePath ? previewMap[data.filePath] || '' : '';
+
+      const now = new Date().toISOString();
+      const optimisticOrder = {
+        id: createdOrderId || `ORD-${Date.now()}`,
+        patientName: user?.name || 'Patient',
+        patientId: userId || 'PAT-000',
+        pharmacyId: pharmacy.id,
+        pharmacyName: pharmacy.name,
+        pharmacyZone: pharmacy.zone || '',
+        pharmacyPhone: pharmacy.phone || '',
+        prescriptionFilePath: data?.filePath || null,
+        prescriptionFileName: file?.name || 'ordonnance.jpg',
+        prescriptionFileSize: file?.size || 0,
+        prescriptionPreview: previewUrlFromStorage || previewUrl || '',
+        status: STATUS.PENDING,
+        conseil: '',
+        total: 0,
+        paymentMethod: null,
+        sentAt: now,
+        updatedAt: now,
+        pickupCode: null,
+        qrCode: null,
+        readyAt: null,
+        deliveredAt: null,
+        meds: [],
+      };
+
+      setPatientOrders(prevOrders => [optimisticOrder, ...prevOrders.filter(order => order.id !== optimisticOrder.id)]);
+      if (createdOrderId) setActiveOrderId(createdOrderId);
+      return createdOrderId;
+    } catch (err) {
+      // On error, return null (caller may show UI feedback)
+      return null;
+    }
   };
 
   const updateOrder = (orderId, updater) => {
@@ -237,7 +487,13 @@ export function AppProvider({ children }) {
 
   return (
     <AppContext.Provider value={{
-      role, user, login, logout,
+      role,
+      user,
+      ownedPharmacy,
+      authReady,
+      authError,
+      login,
+      logout,
       patientOrders, setPatientOrders,
       activeOrder,
       setActiveOrderId,

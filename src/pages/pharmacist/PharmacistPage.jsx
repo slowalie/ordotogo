@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import Topbar from '../../components/shared/Topbar';
 import TabNav from '../../components/shared/TabNav';
 import { STATUS } from '../../data/mockData';
+import { fetchDrugs } from '../../services/supabaseApi';
 
 import AlertesPharmacie      from '../../components/pharmacist/AlertesPharmacie';
 import CreerOrdonnance       from '../../components/pharmacist/CreerOrdonnance';
@@ -33,10 +34,34 @@ const IconDoc = (
 );
 
 export default function PharmacistPage() {
-  const { alerts, prepOrders, waitingDeliveryOrders, patientOrders, submitTranscription } = useApp();
+  const { alerts, prepOrders, waitingDeliveryOrders, patientOrders, submitTranscription, user } = useApp();
   const [activeTab,    setActiveTab]    = useState('alerts');
   const [selectedAlert, setSelectedAlert] = useState(null);
   const [sentSuccess,   setSentSuccess]  = useState(false);
+  const [drugs,        setDrugs]        = useState([]);
+  const [drugsLoading, setDrugsLoading] = useState(false);
+  const pharmacyName = user?.pharmacyName || user?.ownedPharmacy?.name || '';
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadDrugs = async () => {
+      setDrugsLoading(true);
+      try {
+        const { data } = await fetchDrugs();
+        if (isMounted) {
+          setDrugs(data || []);
+        }
+      } finally {
+        if (isMounted) {
+          setDrugsLoading(false);
+        }
+      }
+    };
+
+    loadDrugs();
+    return () => { isMounted = false; };
+  }, []);
 
 
 
@@ -135,6 +160,7 @@ export default function PharmacistPage() {
         return (
           <CreerOrdonnance
             alert={selectedAlert}
+            drugs={drugs}
             onSend={handleSent}
             onBack={handleBackFromCreate}
           />
@@ -159,7 +185,9 @@ export default function PharmacistPage() {
       <Topbar notifCount={alerts.length} />
       <TabNav tabs={tabs} active={activeTab} onChange={setActiveTab} />
       <main className="container" style={{ flex: 1, paddingTop: 'var(--space-md)', paddingBottom: 'var(--space-md)' }}>
-        <h2 style={{ margin: '8px 0 12px', color: 'var(--green-800)', fontFamily: 'var(--font-display)', fontSize: '18px' }}>Espace Pharmacien</h2>
+        <h2 style={{ margin: '8px 0 12px', color: 'var(--green-800)', fontFamily: 'var(--font-display)', fontSize: '18px' }}>
+          {pharmacyName ? `Espace ${pharmacyName}` : 'Espace Pharmacien'}
+        </h2>
         <div style={{ marginBottom: '18px' }}>
           <StatsDashboard stats={getStats()} columns={3} />
         </div>

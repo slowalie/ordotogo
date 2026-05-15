@@ -1,5 +1,7 @@
+import { useEffect, useState } from 'react';
 import { Card, Badge, Button, EmptyState, Avatar } from '../shared/UI';
 import { BiIcon } from '../shared/UI';
+import { createSignedUrlsForPaths } from '../../services/supabaseApi';
 
 function timeAgo(isoStr) {
   const diff = Math.floor((Date.now() - new Date(isoStr)) / 60000);
@@ -35,6 +37,31 @@ export default function AlertesPharmacie({ alerts = [], onTreat }) {
 }
 
 function AlertCard({ alert, onTreat }) {
+  const [resolvedPreview, setResolvedPreview] = useState(alert.prescriptionPreview || '');
+
+  useEffect(() => {
+    let isMounted = true;
+
+    if (alert.prescriptionPreview) {
+      setResolvedPreview(alert.prescriptionPreview);
+      return () => { isMounted = false; };
+    }
+
+    if (!alert.prescriptionFilePath) {
+      setResolvedPreview('');
+      return () => { isMounted = false; };
+    }
+
+    createSignedUrlsForPaths([alert.prescriptionFilePath]).then((map) => {
+      if (!isMounted) return;
+      setResolvedPreview(map[alert.prescriptionFilePath] || '');
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [alert.prescriptionPreview, alert.prescriptionFilePath]);
+
   return (
     <Card style={{ padding: 0, overflow: 'hidden', border: '1px solid var(--blue-50)' }}>
       {/* Header */}
@@ -49,9 +76,9 @@ function AlertCard({ alert, onTreat }) {
 
       {/* Photo preview */}
       <div className="alert-card__body">
-        {alert.prescriptionPreview ? (
+        {resolvedPreview ? (
           <div className="alert-card__photo-preview">
-            <img src={alert.prescriptionPreview} alt="Ordonnance patient" className="alert-card__photo-img" />
+            <img src={resolvedPreview} alt="Ordonnance patient" className="alert-card__photo-img" />
           </div>
         ) : (
           <div className="alert-card__photo">

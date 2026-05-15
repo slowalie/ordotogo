@@ -124,7 +124,7 @@ const demoAccounts = {
 };
 
 export default function AuthPage() {
-  const { login } = useApp();
+  const { login, authError } = useApp();
   const [selected, setSelected] = useState(null);
   const [loginOpen, setLoginOpen] = useState(false);
   const [role, setRole] = useState('patient');
@@ -153,7 +153,7 @@ export default function AuthPage() {
     setDemoLabel('');
   };
 
-  const handleLoginSubmit = (event) => {
+  const handleLoginSubmit = async (event) => {
     event.preventDefault();
 
     if (!email.trim() || !password.trim()) {
@@ -161,12 +161,17 @@ export default function AuthPage() {
       return;
     }
 
-    login({
+    const result = await login({
       role,
       email: email.trim(),
       password,
-      displayName: role === 'pharma' ? 'Pharmacie Lumen' : 'Patient Démo',
     });
+
+    if (result?.error) {
+      setLoginError(result.error.message || 'Connexion impossible.');
+      return;
+    }
+
     closeLogin();
   };
 
@@ -326,7 +331,7 @@ export default function AuthPage() {
                           size="lg"
                           onClick={() => {
                             setSelected(card.id);
-                            login(card.id);
+                              openLogin();
                           }}
                           style={{ borderRadius: '12px', background: 'linear-gradient(135deg, var(--green-50) 0%, #e8fbf1 100%)', color: 'var(--green-800)', outline: '1px solid rgba(22, 163, 74, 0.12)' }}
                         >
@@ -493,9 +498,9 @@ export default function AuthPage() {
                 />
               </label>
 
-              {loginError && (
+              {(loginError || authError) && (
                 <div style={{ marginBottom: '14px', borderRadius: '12px', padding: '10px 12px', background: 'var(--coral-50)', color: 'var(--coral-600)', fontSize: '13px', fontWeight: 600 }}>
-                  {loginError}
+                  {loginError || authError}
                 </div>
               )}
 
