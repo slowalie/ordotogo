@@ -477,6 +477,24 @@ export function AppProvider({ children }) {
   const activeOrder = getOrderById(activeOrderId) || patientOrders[0] || null;
 
   // All orders awaiting patient action: sent to pharmacist or being transcribed
+  const refreshWorkspace = async () => {
+    if (!isSupabaseConfigured) return;
+
+    try {
+      const orders = await loadWorkspaceOrders();
+      const normalizedOrders = await refreshOrderPreviews(orders);
+      setPatientOrders(normalizedOrders.length > 0 ? normalizedOrders : []);
+      setActiveOrderId(currentActiveOrderId => {
+        if (currentActiveOrderId && normalizedOrders.some(order => order.id === currentActiveOrderId)) {
+          return currentActiveOrderId;
+        }
+        return normalizedOrders[0]?.id || currentActiveOrderId || null;
+      });
+    } catch (error) {
+      // Ignore refresh errors
+    }
+  };
+
   const pendingOrders = patientOrders.filter(order => 
     [STATUS.PENDING, STATUS.PROCESSING, STATUS.WAITING_VALIDATION, STATUS.VALIDATED].includes(order.status)
   );
@@ -506,6 +524,7 @@ export function AppProvider({ children }) {
       validateDelivery,
       markOrderDelivered,
       getOrderById,
+      refreshWorkspace,
       alerts,
       prepOrders,
       waitingDeliveryOrders,

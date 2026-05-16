@@ -41,6 +41,15 @@ function AlertCard({ alert, onTreat }) {
 
   useEffect(() => {
     let isMounted = true;
+    let refreshInterval = null;
+
+    const refreshSignedUrl = async () => {
+      if (!alert.prescriptionFilePath) return;
+
+      const map = await createSignedUrlsForPaths([alert.prescriptionFilePath]);
+      if (!isMounted) return;
+      setResolvedPreview(map[alert.prescriptionFilePath] || '');
+    };
 
     if (alert.prescriptionPreview) {
       setResolvedPreview(alert.prescriptionPreview);
@@ -52,13 +61,17 @@ function AlertCard({ alert, onTreat }) {
       return () => { isMounted = false; };
     }
 
-    createSignedUrlsForPaths([alert.prescriptionFilePath]).then((map) => {
-      if (!isMounted) return;
-      setResolvedPreview(map[alert.prescriptionFilePath] || '');
-    });
+    // Générer l'URL signée immédiatement
+    refreshSignedUrl();
+
+    // Régénérer toutes les 50 minutes (avant expiration à 60 minutes)
+    refreshInterval = setInterval(() => {
+      refreshSignedUrl();
+    }, 50 * 60 * 1000);
 
     return () => {
       isMounted = false;
+      if (refreshInterval) clearInterval(refreshInterval);
     };
   }, [alert.prescriptionPreview, alert.prescriptionFilePath]);
 

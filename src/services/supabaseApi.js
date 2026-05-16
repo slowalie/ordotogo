@@ -103,7 +103,7 @@ export async function createSignedUrlsForPaths(paths) {
   await Promise.all(uniquePaths.map(async (path) => {
     const { data, error } = await supabase.storage
       .from(PRESCRIPTION_BUCKET)
-      .createSignedUrl(path, 60 * 60);
+      .createSignedUrl(path, 24 * 60 * 60);
 
     if (!error && data?.signedUrl) {
       signedUrls[path] = data.signedUrl;
