@@ -3,6 +3,15 @@ import { PHARMACIES as MOCK_PHARMACIES } from '../data/mockData';
 
 const PRESCRIPTION_BUCKET = 'prescriptions';
 
+export function isUsablePrescriptionUrl(value) {
+  if (!value) return false;
+  const normalized = String(value).trim();
+  return normalized.startsWith('https://')
+    || normalized.startsWith('http://')
+    || normalized.startsWith('data:image/')
+    || normalized.startsWith('blob:');
+}
+
 function toTitleCase(value) {
   return String(value || '')
     .split(/[._-]+/)
@@ -108,11 +117,29 @@ function buildPrescriptionPathCandidates(rawPath) {
     candidates.add(withoutLeadingSlash.slice(PRESCRIPTION_BUCKET.length + 1));
   }
 
+  const storageUrlMatch = withoutLeadingSlash.match(/storage\/v1\/object\/(?:sign|public)\/([^?#]+)/i);
+  if (storageUrlMatch?.[1]) {
+    const storagePath = storageUrlMatch[1];
+    candidates.add(storagePath);
+    if (storagePath.startsWith(`${PRESCRIPTION_BUCKET}/`)) {
+      candidates.add(storagePath.slice(PRESCRIPTION_BUCKET.length + 1));
+    }
+  }
+
   try {
     const decoded = decodeURIComponent(withoutLeadingSlash);
     candidates.add(decoded);
     if (decoded.startsWith(`${PRESCRIPTION_BUCKET}/`)) {
       candidates.add(decoded.slice(PRESCRIPTION_BUCKET.length + 1));
+    }
+
+    const decodedStorageUrlMatch = decoded.match(/storage\/v1\/object\/(?:sign|public)\/([^?#]+)/i);
+    if (decodedStorageUrlMatch?.[1]) {
+      const storagePath = decodedStorageUrlMatch[1];
+      candidates.add(storagePath);
+      if (storagePath.startsWith(`${PRESCRIPTION_BUCKET}/`)) {
+        candidates.add(storagePath.slice(PRESCRIPTION_BUCKET.length + 1));
+      }
     }
   } catch (error) {
     // Ignore malformed URI components.
@@ -122,8 +149,15 @@ function buildPrescriptionPathCandidates(rawPath) {
   if (withoutLeadingSlash.includes(marker)) {
     const parts = withoutLeadingSlash.split(marker);
     const tail = parts[parts.length - 1] || '';
+    const signOrPublicTail = tail.replace(/^(?:sign|public)\//i, '');
+
     if (tail.startsWith(`${PRESCRIPTION_BUCKET}/`)) {
       candidates.add(tail.slice(PRESCRIPTION_BUCKET.length + 1));
+    }
+
+    if (signOrPublicTail.startsWith(`${PRESCRIPTION_BUCKET}/`)) {
+      candidates.add(signOrPublicTail.slice(PRESCRIPTION_BUCKET.length + 1));
+      candidates.add(signOrPublicTail);
     }
   }
 
@@ -171,6 +205,51 @@ export async function createObjectUrlForPrescriptionPath(path) {
   }
 
   return '';
+}
+
+export async function resolvePrescriptionPreviewUrl({ filePath, previewUrl } = {}) {
+  if (isUsablePrescriptionUrl(previewUrl)) {
+    return String(previewUrl).trim();
+  }
+
+  if (isUsablePrescriptionUrl(filePath)) {
+    return String(filePath).trim();
+  }
+
+  if (!isSupabaseConfigured || !filePath) {
+    return '';
+  }
+
+  // try signed url for the exact stored value
+  const signedUrls = await createSignedUrlsForPaths([filePath]);
+  if (signedUrls[filePath]) {
+    return signedUrls[filePath];
+  }
+
+  // if exact path didn't yield a signed url, try to find matching objects
+  // (handles cases where DB stores variants like with/without bucket prefix or encoded URLs)
+  try {
+    const hits = await findObjectsMatchingCandidates(filePath);
+    const foundCandidate = Object.keys(hits).find(k => hits[k]?.exists);
+    if (foundCandidate) {
+      // try to create a signed url for the discovered candidate
+      try {
+        const { data, error } = await supabase.storage.from(PRESCRIPTION_BUCKET).createSignedUrl(foundCandidate, 24 * 60 * 60);
+        if (!error && data?.signedUrl) return data.signedUrl;
+      } catch (err) {
+        console.error('createSignedUrl for foundCandidate failed', foundCandidate, err);
+      }
+
+      // fallback to downloading the discovered candidate and returning an object URL
+      const objectUrl = await createObjectUrlForPrescriptionPath(foundCandidate);
+      if (objectUrl) return objectUrl;
+    }
+  } catch (err) {
+    console.error('resolvePrescriptionPreviewUrl: findObjectsMatchingCandidates failed', err);
+  }
+
+  // final fallback: try to download/create object URL for original filePath
+  return createObjectUrlForPrescriptionPath(filePath);
 }
 
 export async function findObjectsMatchingCandidates(path) {

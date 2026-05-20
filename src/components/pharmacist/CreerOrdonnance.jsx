@@ -1,38 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Card, Button, Input, Textarea, Select, Divider, Avatar, BiIcon } from '../shared/UI';
 import { DRUG_DATABASE } from '../../data/mockData';
-import { createObjectUrlForPrescriptionPath, createSignedUrlsForPaths } from '../../services/supabaseApi';
-
-async function openDocumentForOrder(alert, resolvedPreview) {
-  try {
-    if (resolvedPreview) {
-      window.open(resolvedPreview, '_blank');
-      return;
-    }
-
-    if (alert?.prescriptionFilePath) {
-      const map = await createSignedUrlsForPaths([alert.prescriptionFilePath]);
-      const url = map[alert.prescriptionFilePath];
-      if (url) {
-        window.open(url, '_blank');
-        return;
-      }
-
-      const blobUrl = await createObjectUrlForPrescriptionPath(alert.prescriptionFilePath);
-      if (blobUrl) {
-        window.open(blobUrl, '_blank');
-        return;
-      }
-    }
-
-    if (isUsablePreviewUrl(alert?.prescriptionPreview)) {
-      window.open(alert.prescriptionPreview, '_blank');
-      return;
-    }
-  } catch (err) {
-    console.error('openDocumentForOrder error', err);
-  }
-}
+import { isUsablePrescriptionUrl, resolvePrescriptionPreviewUrl } from '../../services/supabaseApi';
 
 function getDrugOptions(drugs) {
   if (!Array.isArray(drugs) || drugs.length === 0) {
@@ -43,10 +12,9 @@ function getDrugOptions(drugs) {
 
 const defaultMed = () => ({ drugId: '', qty: '1', duree: '7j', posologie: '' });
 
-function isUsablePreviewUrl(url) {
-  if (!url) return false;
-  const value = String(url).trim();
-  return value.startsWith('https://') || value.startsWith('http://') || value.startsWith('data:image/');
+function isPdfPreview(alert, resolvedPreview) {
+  const source = `${alert?.prescriptionFileName || ''} ${alert?.prescriptionFilePath || ''} ${resolvedPreview || ''}`;
+  return /\.pdf(?:$|[?#])/i.test(source);
 }
 
 export default function CreerOrdonnance({ alert, drugs = [], onSend, onBack }) {
@@ -54,45 +22,32 @@ export default function CreerOrdonnance({ alert, drugs = [], onSend, onBack }) {
   const [conseil, setConseil] = useState('');
   const [sending, setSending] = useState(false);
   const [resolvedPreview, setResolvedPreview] = useState('');
+  const [previewOpen, setPreviewOpen] = useState(false);
   const [sendError, setSendError] = useState('');
   const drugOptions = useMemo(() => getDrugOptions(drugs), [drugs]);
+  const previewIsPdf = useMemo(() => isPdfPreview(alert, resolvedPreview), [alert, resolvedPreview]);
 
   useEffect(() => {
     let isMounted = true;
     let objectPreviewUrl = '';
 
     const resolvePreview = async () => {
-      if (!alert?.prescriptionFilePath) {
-        setResolvedPreview(isUsablePreviewUrl(alert?.prescriptionPreview) ? alert.prescriptionPreview : '');
-        return;
-      }
+      const nextPreview = await resolvePrescriptionPreviewUrl({
+        filePath: alert?.prescriptionFilePath,
+        previewUrl: alert?.prescriptionPreview,
+      });
 
-      const map = await createSignedUrlsForPaths([alert.prescriptionFilePath]);
-      if (!isMounted) return;
-      const nextSigned = map[alert.prescriptionFilePath] || '';
-      if (nextSigned) {
-        setResolvedPreview(nextSigned);
-        return;
-      }
-
-      if (isUsablePreviewUrl(alert?.prescriptionPreview)) {
-        setResolvedPreview(alert.prescriptionPreview);
-        return;
-      }
-
-      const objectUrl = await createObjectUrlForPrescriptionPath(alert.prescriptionFilePath);
       if (!isMounted) {
-        if (objectUrl) URL.revokeObjectURL(objectUrl);
-        return;
-      }
-      if (objectUrl) {
-        if (objectPreviewUrl) URL.revokeObjectURL(objectPreviewUrl);
-        objectPreviewUrl = objectUrl;
-        setResolvedPreview(objectUrl);
+        if (nextPreview && nextPreview.startsWith('blob:')) URL.revokeObjectURL(nextPreview);
         return;
       }
 
-      setResolvedPreview('');
+      if (nextPreview && nextPreview.startsWith('blob:')) {
+        if (objectPreviewUrl) URL.revokeObjectURL(objectPreviewUrl);
+        objectPreviewUrl = nextPreview;
+      }
+
+      setResolvedPreview(nextPreview);
     };
 
     if (!alert) {
@@ -174,19 +129,28 @@ export default function CreerOrdonnance({ alert, drugs = [], onSend, onBack }) {
             </div>
             <div className="pharma-info-card__photo">
               {resolvedPreview ? (
-                <a href={resolvedPreview} target="_blank" rel="noreferrer" title="Ouvrir l'ordonnance">
+                <button type="button" className="pharma-info-card__preview-trigger" title="Cliquer pour agrandir" onClick={() => setPreviewOpen(true)}>
                   <img src={resolvedPreview} alt="Ordonnance" className="pharma-info-card__preview" />
-                </a>
+                </button>
               ) : (
                 <div className="pharma-info-card__photo-box"><BiIcon name="clipboard" /></div>
               )}
               <div className="pharma-info-card__photo-label" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span>{alert.prescriptionFileName || 'Photo ordonnance'}</span>
-                <button className="btn-link" onClick={() => openDocumentForOrder(alert, resolvedPreview)} style={{ marginLeft: 8 }}>Ouvrir</button>
+                <Button size="sm" variant="ghost" onClick={() => setPreviewOpen(true)} style={{ marginLeft: 8 }}>Agrandir</Button>
               </div>
             </div>
           </div>
         </Card>
+      )}
+
+      {previewOpen && (
+        <PreviewModal
+          title={alert?.prescriptionFileName || 'Ordonnance'}
+          previewUrl={resolvedPreview}
+          isPdf={previewIsPdf}
+          onClose={() => setPreviewOpen(false)}
+        />
       )}
 
       {/* Medications */}
@@ -278,6 +242,47 @@ export default function CreerOrdonnance({ alert, drugs = [], onSend, onBack }) {
         >
           {sending ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}><BiIcon name="hourglass-split" />Envoi au patient...</span> : 'Envoyer l\'ordonnance au patient →'}
         </Button>
+      </div>
+    </div>
+  );
+}
+
+function PreviewModal({ title, previewUrl, isPdf, onClose }) {
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') onClose();
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [onClose]);
+
+  return (
+    <div className="preview-modal__overlay" role="presentation" onClick={onClose}>
+      <div className="preview-modal" role="dialog" aria-modal="true" aria-label={title} onClick={(event) => event.stopPropagation()}>
+        <div className="preview-modal__header">
+          <div>
+            <div className="preview-modal__title">{title}</div>
+            <div className="preview-modal__subtitle">Prévisualisation agrandie</div>
+          </div>
+          <button type="button" className="btn-outline" onClick={onClose}>Fermer</button>
+        </div>
+        <div className="preview-modal__body">
+          {previewUrl ? (
+            isPdf ? (
+              <iframe className="preview-modal__frame" src={previewUrl} title={title} />
+            ) : (
+              <img className="preview-modal__image" src={previewUrl} alt={title} />
+            )
+          ) : (
+            <div className="preview-modal__empty">Prévisualisation indisponible</div>
+          )}
+        </div>
+        {previewUrl && (
+          <div className="preview-modal__footer">
+            <a className="btn-outline" href={previewUrl} target="_blank" rel="noreferrer">Ouvrir dans un nouvel onglet</a>
+          </div>
+        )}
       </div>
     </div>
   );

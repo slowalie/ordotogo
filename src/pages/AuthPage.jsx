@@ -118,8 +118,8 @@ const demoAccounts = {
     role: 'pharma',
     label: 'Pharmacie Lumen',
     name: 'Pharmacie Lumen',
-    email: 'lumen@ordotogo.tg',
-    password: 'demo123',
+    email: 'pharmacielumen@gmail.com',
+    password: '123456789',
   },
 };
 
@@ -530,7 +530,7 @@ export default function AuthPage() {
                 </div>
 
                 <div style={{ marginTop: '12px', display: 'grid', gap: '6px', fontSize: '12px', color: 'var(--gray-600)' }}>
-                  <div><strong>Mot de passe :</strong> demo123</div>
+                  <div><strong>Mot de passe :</strong> 123456789</div>
                   <div>Cliquer sur un compte remplit automatiquement les champs ci-dessus.</div>
                 </div>
               </div>

@@ -232,6 +232,102 @@ body {
 }
 .btn-outline:hover { background: var(--gray-50); border-color: var(--gray-400); }
 
+.preview-modal__overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 160;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(7, 15, 26, 0.64);
+  backdrop-filter: blur(10px);
+}
+
+.preview-modal {
+  width: min(100%, 980px);
+  max-height: min(90vh, 900px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 24px;
+  background: #fff;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.28);
+}
+
+.preview-modal__header,
+.preview-modal__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 20px;
+}
+
+.preview-modal__header {
+  border-bottom: 1px solid var(--color-border);
+  background: linear-gradient(180deg, rgba(240, 253, 244, 0.96), rgba(255,255,255,0.98));
+}
+
+.preview-modal__footer {
+  border-top: 1px solid var(--color-border);
+  background: var(--gray-50);
+}
+
+.preview-modal__title {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--green-900);
+}
+
+.preview-modal__subtitle {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.preview-modal__body {
+  min-height: 320px;
+  max-height: calc(90vh - 130px);
+  padding: 16px;
+  background: linear-gradient(180deg, rgba(245,247,250,0.96), rgba(255,255,255,1));
+}
+
+.preview-modal__image,
+.preview-modal__frame {
+  width: 100%;
+  height: 100%;
+  max-height: calc(90vh - 162px);
+  border: 0;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: inset 0 0 0 1px rgba(209, 213, 219, 0.75);
+}
+
+.preview-modal__image {
+  object-fit: contain;
+}
+
+.preview-modal__empty {
+  min-height: 280px;
+  display: grid;
+  place-items: center;
+  border-radius: 18px;
+  border: 1px dashed var(--color-border);
+  color: var(--color-text-muted);
+  background: #fff;
+}
+
+.alert-card__photo-preview,
+.pharma-info-card__preview-trigger {
+  width: 100%;
+  display: block;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: zoom-in;
+}
+
 /* Tab navigation */
 .tabnav {
   background: var(--color-surface);
@@ -981,6 +1077,8 @@ body {
     margin-bottom: 10px;
   }
   .alert-card__photo-preview {
+    display: block;
+    cursor: zoom-in;
     border-radius: var(--radius-sm);
     border: 1px solid var(--color-border);
     overflow: hidden;
@@ -1083,6 +1181,11 @@ body {
     border-radius: var(--radius-sm);
     border: 1px solid var(--color-border);
     display: block;
+  }
+  .pharma-info-card__preview-trigger {
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    margin-bottom: 8px;
   }
   .pharma-info-card__photo-box {
     padding: 6px 12px;

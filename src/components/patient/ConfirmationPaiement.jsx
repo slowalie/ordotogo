@@ -1,8 +1,14 @@
 import { Card, Button, BiIcon } from '../shared/UI';
+import { STATUS } from '../../data/mockData';
 
 export default function ConfirmationPaiement({ method, order, onReset }) {
   const pharmacyName = order?.pharmacyName || 'la pharmacie choisie';
-  const ordCode = order?.pickupCode || '';
+  const canShowPickupCode = [
+    STATUS.READY_FOR_PICKUP,
+    STATUS.AWAITING_DELIVERY,
+    STATUS.DELIVERED,
+  ].includes(order?.status);
+  const ordCode = canShowPickupCode ? (order?.pickupCode || '') : '';
   const isMixx   = method === 'mixx';
 
   return (

@@ -36,6 +36,7 @@ export function Button({
 
   return (
     <button
+      type="button"
       onClick={!disabled ? onClick : undefined}
       className={className}
       style={{ ...base, ...sizes[size], ...variants[variant], ...style }}

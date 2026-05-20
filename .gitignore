@@ -4,3 +4,4 @@ dist
 .env.local
 ordotogo_schema.sql
 .env.local
+scripts

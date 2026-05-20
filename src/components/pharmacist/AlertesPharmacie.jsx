@@ -1,44 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Card, Badge, Button, EmptyState, Avatar } from '../shared/UI';
 import { BiIcon } from '../shared/UI';
-import { createObjectUrlForPrescriptionPath, createSignedUrlsForPaths } from '../../services/supabaseApi';
+import { isUsablePrescriptionUrl, resolvePrescriptionPreviewUrl } from '../../services/supabaseApi';
 
-async function openDocumentForAlert(alert, resolvedPreview) {
-  try {
-    if (resolvedPreview) {
-      window.open(resolvedPreview, '_blank');
-      return;
-    }
-
-    if (alert?.prescriptionFilePath) {
-      const map = await createSignedUrlsForPaths([alert.prescriptionFilePath]);
-      const url = map[alert.prescriptionFilePath];
-      if (url) {
-        window.open(url, '_blank');
-        return;
-      }
-
-      const blobUrl = await createObjectUrlForPrescriptionPath(alert.prescriptionFilePath);
-      if (blobUrl) {
-        window.open(blobUrl, '_blank');
-        return;
-      }
-    }
-
-    if (isUsablePreviewUrl(alert?.prescriptionPreview)) {
-      window.open(alert.prescriptionPreview, '_blank');
-      return;
-    }
-  } catch (err) {
-    // ignore - best effort open
-    console.error('openDocumentForAlert error', err);
-  }
-}
-
-function isUsablePreviewUrl(url) {
-  if (!url) return false;
-  const value = String(url).trim();
-  return value.startsWith('https://') || value.startsWith('http://') || value.startsWith('data:image/');
+function isPdfPreview(alert, resolvedPreview) {
+  const source = `${alert?.prescriptionFileName || ''} ${alert?.prescriptionFilePath || ''} ${resolvedPreview || ''}`;
+  return /\.pdf(?:$|[?#])/i.test(source);
 }
 
 function timeAgo(isoStr) {
@@ -76,6 +43,8 @@ export default function AlertesPharmacie({ alerts = [], onTreat }) {
 
 function AlertCard({ alert, onTreat }) {
   const [resolvedPreview, setResolvedPreview] = useState('');
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const previewIsPdf = useMemo(() => isPdfPreview(alert, resolvedPreview), [alert, resolvedPreview]);
 
   useEffect(() => {
     let isMounted = true;
@@ -83,38 +52,26 @@ function AlertCard({ alert, onTreat }) {
     let objectPreviewUrl = '';
 
     const refreshSignedUrl = async () => {
-      if (!alert.prescriptionFilePath) return;
+      const nextPreview = await resolvePrescriptionPreviewUrl({
+        filePath: alert.prescriptionFilePath,
+        previewUrl: alert.prescriptionPreview,
+      });
 
-      const map = await createSignedUrlsForPaths([alert.prescriptionFilePath]);
-      if (!isMounted) return;
-      const nextSigned = map[alert.prescriptionFilePath] || '';
-      if (nextSigned) {
-        setResolvedPreview(nextSigned);
-        return;
-      }
-
-      if (isUsablePreviewUrl(alert.prescriptionPreview)) {
-        setResolvedPreview(alert.prescriptionPreview);
-        return;
-      }
-
-      const objectUrl = await createObjectUrlForPrescriptionPath(alert.prescriptionFilePath);
       if (!isMounted) {
-        if (objectUrl) URL.revokeObjectURL(objectUrl);
-        return;
-      }
-      if (objectUrl) {
-        if (objectPreviewUrl) URL.revokeObjectURL(objectPreviewUrl);
-        objectPreviewUrl = objectUrl;
-        setResolvedPreview(objectUrl);
+        if (nextPreview && nextPreview.startsWith('blob:')) URL.revokeObjectURL(nextPreview);
         return;
       }
 
-      setResolvedPreview('');
+      if (nextPreview && nextPreview.startsWith('blob:')) {
+        if (objectPreviewUrl) URL.revokeObjectURL(objectPreviewUrl);
+        objectPreviewUrl = nextPreview;
+      }
+
+      setResolvedPreview(nextPreview);
     };
 
     if (!alert.prescriptionFilePath) {
-      setResolvedPreview(isUsablePreviewUrl(alert.prescriptionPreview) ? alert.prescriptionPreview : '');
+      setResolvedPreview(isUsablePrescriptionUrl(alert.prescriptionPreview) ? alert.prescriptionPreview : '');
       return () => { isMounted = false; };
     }
 
@@ -148,9 +105,14 @@ function AlertCard({ alert, onTreat }) {
       {/* Photo preview */}
       <div className="alert-card__body">
         {resolvedPreview ? (
-          <a href={resolvedPreview} target="_blank" rel="noreferrer" className="alert-card__photo-preview" title="Ouvrir l'ordonnance">
+          <button
+            type="button"
+            className="alert-card__photo-preview"
+            title="Cliquer pour agrandir"
+            onClick={() => setPreviewOpen(true)}
+          >
             <img src={resolvedPreview} alt="Ordonnance patient" className="alert-card__photo-img" />
-          </a>
+          </button>
         ) : (
           <div className="alert-card__photo">
             <BiIcon name="clipboard" size={32} />
@@ -171,14 +133,64 @@ function AlertCard({ alert, onTreat }) {
         )}
 
         <div style={{ display: 'flex', gap: '8px' }}>
-          <Button onClick={() => openDocumentForAlert(alert, resolvedPreview)}>
-            Ouvrir le document
+          <Button variant="ghost" size="sm" onClick={() => setPreviewOpen(true)}>
+            Agrandir
           </Button>
           <Button fullWidth onClick={onTreat}>
             Traiter cette ordonnance →
           </Button>
         </div>
       </div>
+
+      {previewOpen && (
+        <PreviewModal
+          title={alert.prescriptionFileName || 'Ordonnance'}
+          previewUrl={resolvedPreview}
+          isPdf={previewIsPdf}
+          onClose={() => setPreviewOpen(false)}
+        />
+      )}
     </Card>
+  );
+}
+
+function PreviewModal({ title, previewUrl, isPdf, onClose }) {
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') onClose();
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [onClose]);
+
+  return (
+    <div className="preview-modal__overlay" role="presentation" onClick={onClose}>
+      <div className="preview-modal" role="dialog" aria-modal="true" aria-label={title} onClick={(event) => event.stopPropagation()}>
+        <div className="preview-modal__header">
+          <div>
+            <div className="preview-modal__title">{title}</div>
+            <div className="preview-modal__subtitle">Prévisualisation agrandie</div>
+          </div>
+          <button type="button" className="btn-outline" onClick={onClose}>Fermer</button>
+        </div>
+        <div className="preview-modal__body">
+          {previewUrl ? (
+            isPdf ? (
+              <iframe className="preview-modal__frame" src={previewUrl} title={title} />
+            ) : (
+              <img className="preview-modal__image" src={previewUrl} alt={title} />
+            )
+          ) : (
+            <div className="preview-modal__empty">Prévisualisation indisponible</div>
+          )}
+        </div>
+        {previewUrl && (
+          <div className="preview-modal__footer">
+            <a className="btn-outline" href={previewUrl} target="_blank" rel="noreferrer">Ouvrir dans un nouvel onglet</a>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }

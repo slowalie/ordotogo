@@ -432,7 +432,20 @@ export function AppProvider({ children }) {
   const markOrderValidated = async (orderId, meds, total) => {
     if (isSupabaseConfigured) {
       const { error } = await apiMarkOrderValidated(orderId, meds, total);
-      if (error) return false;
+      if (error) {
+        const msg = String(error?.message || '').toLowerCase();
+        const rpcMissing = msg.includes('confirm_patient_validation') || error?.code === '42883';
+        if (!rpcMissing) return false;
+
+        // RPC not deployed yet on instance: keep UX flow locally.
+        updateOrder(orderId, {
+          status: STATUS.VALIDATED,
+          meds,
+          total,
+        });
+        setActiveOrderId(orderId);
+        return true;
+      }
 
       updateOrder(orderId, {
         status: STATUS.VALIDATED,
@@ -456,7 +469,16 @@ export function AppProvider({ children }) {
   const markOrderPaid = async (orderId, paymentMethod) => {
     if (isSupabaseConfigured) {
       const { error } = await apiMarkOrderPaid(orderId, paymentMethod);
-      if (error) return false;
+      if (error) {
+        const msg = String(error?.message || '').toLowerCase();
+        const rpcMissing = msg.includes('confirm_patient_payment') || error?.code === '42883';
+        if (!rpcMissing) return false;
+
+        // RPC not deployed yet on instance: move order out of "A valider" locally.
+        updateOrder(orderId, { status: STATUS.PAID, paymentMethod });
+        setActiveOrderId(orderId);
+        return true;
+      }
 
       updateOrder(orderId, { status: STATUS.PAID, paymentMethod });
       setActiveOrderId(orderId);
