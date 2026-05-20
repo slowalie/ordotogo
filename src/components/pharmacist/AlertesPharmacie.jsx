@@ -1,7 +1,45 @@
 import { useEffect, useState } from 'react';
 import { Card, Badge, Button, EmptyState, Avatar } from '../shared/UI';
 import { BiIcon } from '../shared/UI';
-import { createSignedUrlsForPaths } from '../../services/supabaseApi';
+import { createObjectUrlForPrescriptionPath, createSignedUrlsForPaths } from '../../services/supabaseApi';
+
+async function openDocumentForAlert(alert, resolvedPreview) {
+  try {
+    if (resolvedPreview) {
+      window.open(resolvedPreview, '_blank');
+      return;
+    }
+
+    if (alert?.prescriptionFilePath) {
+      const map = await createSignedUrlsForPaths([alert.prescriptionFilePath]);
+      const url = map[alert.prescriptionFilePath];
+      if (url) {
+        window.open(url, '_blank');
+        return;
+      }
+
+      const blobUrl = await createObjectUrlForPrescriptionPath(alert.prescriptionFilePath);
+      if (blobUrl) {
+        window.open(blobUrl, '_blank');
+        return;
+      }
+    }
+
+    if (isUsablePreviewUrl(alert?.prescriptionPreview)) {
+      window.open(alert.prescriptionPreview, '_blank');
+      return;
+    }
+  } catch (err) {
+    // ignore - best effort open
+    console.error('openDocumentForAlert error', err);
+  }
+}
+
+function isUsablePreviewUrl(url) {
+  if (!url) return false;
+  const value = String(url).trim();
+  return value.startsWith('https://') || value.startsWith('http://') || value.startsWith('data:image/');
+}
 
 function timeAgo(isoStr) {
   const diff = Math.floor((Date.now() - new Date(isoStr)) / 60000);
@@ -37,27 +75,46 @@ export default function AlertesPharmacie({ alerts = [], onTreat }) {
 }
 
 function AlertCard({ alert, onTreat }) {
-  const [resolvedPreview, setResolvedPreview] = useState(alert.prescriptionPreview || '');
+  const [resolvedPreview, setResolvedPreview] = useState('');
 
   useEffect(() => {
     let isMounted = true;
     let refreshInterval = null;
+    let objectPreviewUrl = '';
 
     const refreshSignedUrl = async () => {
       if (!alert.prescriptionFilePath) return;
 
       const map = await createSignedUrlsForPaths([alert.prescriptionFilePath]);
       if (!isMounted) return;
-      setResolvedPreview(map[alert.prescriptionFilePath] || '');
+      const nextSigned = map[alert.prescriptionFilePath] || '';
+      if (nextSigned) {
+        setResolvedPreview(nextSigned);
+        return;
+      }
+
+      if (isUsablePreviewUrl(alert.prescriptionPreview)) {
+        setResolvedPreview(alert.prescriptionPreview);
+        return;
+      }
+
+      const objectUrl = await createObjectUrlForPrescriptionPath(alert.prescriptionFilePath);
+      if (!isMounted) {
+        if (objectUrl) URL.revokeObjectURL(objectUrl);
+        return;
+      }
+      if (objectUrl) {
+        if (objectPreviewUrl) URL.revokeObjectURL(objectPreviewUrl);
+        objectPreviewUrl = objectUrl;
+        setResolvedPreview(objectUrl);
+        return;
+      }
+
+      setResolvedPreview('');
     };
 
-    if (alert.prescriptionPreview) {
-      setResolvedPreview(alert.prescriptionPreview);
-      return () => { isMounted = false; };
-    }
-
     if (!alert.prescriptionFilePath) {
-      setResolvedPreview('');
+      setResolvedPreview(isUsablePreviewUrl(alert.prescriptionPreview) ? alert.prescriptionPreview : '');
       return () => { isMounted = false; };
     }
 
@@ -72,6 +129,7 @@ function AlertCard({ alert, onTreat }) {
     return () => {
       isMounted = false;
       if (refreshInterval) clearInterval(refreshInterval);
+      if (objectPreviewUrl) URL.revokeObjectURL(objectPreviewUrl);
     };
   }, [alert.prescriptionPreview, alert.prescriptionFilePath]);
 
@@ -90,9 +148,9 @@ function AlertCard({ alert, onTreat }) {
       {/* Photo preview */}
       <div className="alert-card__body">
         {resolvedPreview ? (
-          <div className="alert-card__photo-preview">
+          <a href={resolvedPreview} target="_blank" rel="noreferrer" className="alert-card__photo-preview" title="Ouvrir l'ordonnance">
             <img src={resolvedPreview} alt="Ordonnance patient" className="alert-card__photo-img" />
-          </div>
+          </a>
         ) : (
           <div className="alert-card__photo">
             <BiIcon name="clipboard" size={32} />
@@ -112,9 +170,14 @@ function AlertCard({ alert, onTreat }) {
           </div>
         )}
 
-        <Button fullWidth onClick={onTreat}>
-          Traiter cette ordonnance →
-        </Button>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <Button onClick={() => openDocumentForAlert(alert, resolvedPreview)}>
+            Ouvrir le document
+          </Button>
+          <Button fullWidth onClick={onTreat}>
+            Traiter cette ordonnance →
+          </Button>
+        </div>
       </div>
     </Card>
   );

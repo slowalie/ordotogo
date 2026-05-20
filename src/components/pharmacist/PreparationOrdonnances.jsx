@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Card, Badge, Button, EmptyState, BiIcon } from '../shared/UI';
 import { useApp } from '../../context/AppContext';
 import { STATUS } from '../../data/mockData';
@@ -11,6 +11,8 @@ function generateQRCodeURL(text) {
 
 export default function PreparationOrdonnances() {
   const { prepOrders, markOrderReady, markPreparationComplete } = useApp();
+  const [actionError, setActionError] = useState('');
+  const [loadingOrderId, setLoadingOrderId] = useState(null);
 
   const paidOrders = useMemo(
     () => prepOrders.filter(order => order.status === STATUS.PAID),
@@ -43,10 +45,31 @@ export default function PreparationOrdonnances() {
           />
         ) : (
           paidOrders.map(order => (
-            <PrepCard key={order.id} order={order} onMarkReady={() => markOrderReady(order.id)} />
+            <PrepCard
+              key={order.id}
+              order={order}
+              loading={loadingOrderId === order.id}
+              onMarkReady={async () => {
+                setActionError('');
+                setLoadingOrderId(order.id);
+                console.log('Prep: starting markOrderReady for', order.id);
+                const ok = await markOrderReady(order.id);
+                console.log('Prep: markOrderReady result for', order.id, ok);
+                if (!ok) {
+                  setActionError('Impossible de commencer la préparation pour le moment.');
+                }
+                setLoadingOrderId(null);
+              }}
+            />
           ))
         )}
       </section>
+
+      {actionError && (
+        <div style={{ padding: '10px 12px', borderRadius: '10px', background: 'var(--coral-50)', color: 'var(--coral-600)', fontSize: '13px', fontWeight: 600 }}>
+          {actionError}
+        </div>
+      )}
 
       {/* Section: En préparation */}
       {preparingOrders.length > 0 && (
@@ -56,7 +79,20 @@ export default function PreparationOrdonnances() {
           </div>
 
           {preparingOrders.map(order => (
-            <PreparingCard key={order.id} order={order} onCompletePreparation={() => markPreparationComplete(order.id)} />
+            <PreparingCard
+              key={order.id}
+              order={order}
+              loading={loadingOrderId === order.id}
+              onCompletePreparation={async () => {
+                setActionError('');
+                setLoadingOrderId(order.id);
+                const result = await markPreparationComplete(order.id);
+                if (!result) {
+                  setActionError('Impossible de terminer la préparation pour le moment.');
+                }
+                setLoadingOrderId(null);
+              }}
+            />
           ))}
         </section>
       )}
@@ -81,7 +117,7 @@ export default function PreparationOrdonnances() {
   );
 }
 
-function PrepCard({ order, onMarkReady }) {
+function PrepCard({ order, onMarkReady, loading = false }) {
   const meds = order.meds || [];
 
   return (
@@ -116,15 +152,15 @@ function PrepCard({ order, onMarkReady }) {
           ))}
         </div>
 
-        <Button fullWidth variant="success" onClick={onMarkReady}>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}><BiIcon name="arrow-right-circle" />Commencer la preparation</span>
+        <Button fullWidth variant="success" onClick={onMarkReady} disabled={loading}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}><BiIcon name="arrow-right-circle" />{loading ? 'Démarrage...' : 'Commencer la préparation'}</span>
         </Button>
       </div>
     </Card>
   );
 }
 
-function PreparingCard({ order, onCompletePreparation }) {
+function PreparingCard({ order, onCompletePreparation, loading = false }) {
   const meds = order.meds || [];
 
   return (
@@ -159,8 +195,8 @@ function PreparingCard({ order, onCompletePreparation }) {
           ))}
         </div>
 
-        <Button fullWidth variant="success" onClick={onCompletePreparation}>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}><BiIcon name="check2-circle" />Preparation terminee - Generer codes</span>
+        <Button fullWidth variant="success" onClick={onCompletePreparation} disabled={loading}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}><BiIcon name="check2-circle" />{loading ? 'Finalisation...' : 'Préparation terminée - Générer codes'}</span>
         </Button>
       </div>
     </Card>

@@ -133,21 +133,32 @@ export default function PatientPage() {
     setAccepted(prev => ({ ...prev, [id]: prev[id] === false ? true : false }));
   };
 
-  const handleValidate = () => {
+  const handleValidate = async () => {
     if (!activeOrder?.meds?.length) return;
     const acceptedMeds = activeOrder.meds.filter(med => accepted[med.id] !== false);
     const total = acceptedMeds.reduce((sum, med) => sum + med.price, 0);
     if (!acceptedMeds.length) return;
-    markOrderValidated(activeOrder.id, acceptedMeds, total);
+    const isSaved = await markOrderValidated(activeOrder.id, acceptedMeds, total);
+
+    if (isSaved) {
+      setActiveTab('paiement');
+    }
     
     // Afficher un message de succès via un toast ou similaire
     // Pour l'instant, rien ne change automatiquement
   };
 
-  const handlePaid = (method) => {
+  const handlePaid = async (method) => {
     if (!activeOrder) return;
+    if (!method) return false;
     setPayMethod(method);
-    markOrderPaid(activeOrder.id, method);
+    const isSaved = await markOrderPaid(activeOrder.id, method);
+
+    if (isSaved) {
+      setActiveTab('confirmation');
+    }
+
+    return isSaved;
     
     // Afficher un message de succès
     // Pour l'instant, rien ne change automatiquement

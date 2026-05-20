@@ -1,6 +1,38 @@
-import { useState, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Card, Button, Input, Textarea, Select, Divider, Avatar, BiIcon } from '../shared/UI';
 import { DRUG_DATABASE } from '../../data/mockData';
+import { createObjectUrlForPrescriptionPath, createSignedUrlsForPaths } from '../../services/supabaseApi';
+
+async function openDocumentForOrder(alert, resolvedPreview) {
+  try {
+    if (resolvedPreview) {
+      window.open(resolvedPreview, '_blank');
+      return;
+    }
+
+    if (alert?.prescriptionFilePath) {
+      const map = await createSignedUrlsForPaths([alert.prescriptionFilePath]);
+      const url = map[alert.prescriptionFilePath];
+      if (url) {
+        window.open(url, '_blank');
+        return;
+      }
+
+      const blobUrl = await createObjectUrlForPrescriptionPath(alert.prescriptionFilePath);
+      if (blobUrl) {
+        window.open(blobUrl, '_blank');
+        return;
+      }
+    }
+
+    if (isUsablePreviewUrl(alert?.prescriptionPreview)) {
+      window.open(alert.prescriptionPreview, '_blank');
+      return;
+    }
+  } catch (err) {
+    console.error('openDocumentForOrder error', err);
+  }
+}
 
 function getDrugOptions(drugs) {
   if (!Array.isArray(drugs) || drugs.length === 0) {
@@ -11,11 +43,70 @@ function getDrugOptions(drugs) {
 
 const defaultMed = () => ({ drugId: '', qty: '1', duree: '7j', posologie: '' });
 
+function isUsablePreviewUrl(url) {
+  if (!url) return false;
+  const value = String(url).trim();
+  return value.startsWith('https://') || value.startsWith('http://') || value.startsWith('data:image/');
+}
+
 export default function CreerOrdonnance({ alert, drugs = [], onSend, onBack }) {
   const [meds,    setMeds]    = useState([defaultMed()]);
   const [conseil, setConseil] = useState('');
   const [sending, setSending] = useState(false);
+  const [resolvedPreview, setResolvedPreview] = useState('');
+  const [sendError, setSendError] = useState('');
   const drugOptions = useMemo(() => getDrugOptions(drugs), [drugs]);
+
+  useEffect(() => {
+    let isMounted = true;
+    let objectPreviewUrl = '';
+
+    const resolvePreview = async () => {
+      if (!alert?.prescriptionFilePath) {
+        setResolvedPreview(isUsablePreviewUrl(alert?.prescriptionPreview) ? alert.prescriptionPreview : '');
+        return;
+      }
+
+      const map = await createSignedUrlsForPaths([alert.prescriptionFilePath]);
+      if (!isMounted) return;
+      const nextSigned = map[alert.prescriptionFilePath] || '';
+      if (nextSigned) {
+        setResolvedPreview(nextSigned);
+        return;
+      }
+
+      if (isUsablePreviewUrl(alert?.prescriptionPreview)) {
+        setResolvedPreview(alert.prescriptionPreview);
+        return;
+      }
+
+      const objectUrl = await createObjectUrlForPrescriptionPath(alert.prescriptionFilePath);
+      if (!isMounted) {
+        if (objectUrl) URL.revokeObjectURL(objectUrl);
+        return;
+      }
+      if (objectUrl) {
+        if (objectPreviewUrl) URL.revokeObjectURL(objectPreviewUrl);
+        objectPreviewUrl = objectUrl;
+        setResolvedPreview(objectUrl);
+        return;
+      }
+
+      setResolvedPreview('');
+    };
+
+    if (!alert) {
+      setResolvedPreview('');
+      return () => { isMounted = false; };
+    }
+
+    resolvePreview();
+
+    return () => {
+      isMounted = false;
+      if (objectPreviewUrl) URL.revokeObjectURL(objectPreviewUrl);
+    };
+  }, [alert]);
 
   const addMed    = () => setMeds(m => [...m, defaultMed()]);
   const removeMed = (i) => setMeds(m => m.filter((_, idx) => idx !== i));
@@ -31,7 +122,7 @@ export default function CreerOrdonnance({ alert, drugs = [], onSend, onBack }) {
     return s + (price * parseInt(m.qty || 1));
   }, 0);
 
-  const handleSend = () => {
+  const handleSend = async () => {
     const db = getDrugDatabase();
     const medsPayload = validMeds.map((med, index) => {
       const drug = db.find(d => d.id === med.drugId);
@@ -48,15 +139,25 @@ export default function CreerOrdonnance({ alert, drugs = [], onSend, onBack }) {
       };
     });
 
+    setSendError('');
     setSending(true);
-    setTimeout(() => {
-      setSending(false);
-      onSend({
+    await new Promise(resolve => setTimeout(resolve, 1500));
+
+    try {
+      const isSent = await onSend({
         meds: medsPayload,
         conseil,
         total,
       });
-    }, 1500);
+
+      if (!isSent) {
+        setSendError('Impossible d\'envoyer l\'ordonnance. Vérifiez la connexion à la base ou les droits Supabase.');
+      }
+    } catch (error) {
+      setSendError(error?.message || 'Impossible d\'envoyer l\'ordonnance.');
+    } finally {
+      setSending(false);
+    }
   };
 
   return (
@@ -72,12 +173,17 @@ export default function CreerOrdonnance({ alert, drugs = [], onSend, onBack }) {
               <div className="pharma-info-card__id">{alert.patientId}</div>
             </div>
             <div className="pharma-info-card__photo">
-              {alert.prescriptionPreview ? (
-                <img src={alert.prescriptionPreview} alt="Ordonnance" className="pharma-info-card__preview" />
+              {resolvedPreview ? (
+                <a href={resolvedPreview} target="_blank" rel="noreferrer" title="Ouvrir l'ordonnance">
+                  <img src={resolvedPreview} alt="Ordonnance" className="pharma-info-card__preview" />
+                </a>
               ) : (
                 <div className="pharma-info-card__photo-box"><BiIcon name="clipboard" /></div>
               )}
-              <div className="pharma-info-card__photo-label">{alert.prescriptionFileName || 'Photo ordonnance'}</div>
+              <div className="pharma-info-card__photo-label" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span>{alert.prescriptionFileName || 'Photo ordonnance'}</span>
+                <button className="btn-link" onClick={() => openDocumentForOrder(alert, resolvedPreview)} style={{ marginLeft: 8 }}>Ouvrir</button>
+              </div>
             </div>
           </div>
         </Card>
@@ -153,6 +259,12 @@ export default function CreerOrdonnance({ alert, drugs = [], onSend, onBack }) {
             <span>Total estimé</span>
             <span>{total.toLocaleString()} FCFA</span>
           </div>
+        </Card>
+      )}
+
+      {sendError && (
+        <Card style={{ border: '1px solid var(--coral-200)', background: 'var(--coral-50)', color: 'var(--coral-700)', padding: '12px 16px' }}>
+          {sendError}
         </Card>
       )}
 

@@ -256,11 +256,9 @@ export default function AuthPage() {
               </p>
 
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '14px', marginTop: '30px' }}>
-                <button type="button" onClick={openLogin} style={{ border: 'none', background: 'transparent', padding: 0, cursor: 'pointer' }}>
-                  <Button size="lg" style={{ borderRadius: '14px', padding: '14px 22px', background: '#1fc889', color: '#fff', boxShadow: '0 18px 34px rgba(31, 200, 137, 0.35)' }}>
-                    Accéder à l’espace →
-                  </Button>
-                </button>
+                <Button size="lg" onClick={openLogin} style={{ borderRadius: '14px', padding: '14px 22px', background: '#1fc889', color: '#fff', boxShadow: '0 18px 34px rgba(31, 200, 137, 0.35)' }}>
+                  Accéder à l’espace →
+                </Button>
                 <a href="#features" style={{ textDecoration: 'none' }}>
                   <Button variant="ghost" size="lg" style={{ borderRadius: '14px', padding: '14px 22px', background: 'transparent', color: 'rgba(255,255,255,0.88)', outline: '1px solid rgba(255,255,255,0.22)' }}>
                     Voir les fonctionnalités

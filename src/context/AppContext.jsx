@@ -7,6 +7,12 @@ import {
   signInWithPassword,
   signOut as supabaseSignOut,
   createPatientOrder as apiCreatePatientOrder,
+  submitTranscription as apiSubmitTranscription,
+  markOrderValidated as apiMarkOrderValidated,
+  markOrderPaid as apiMarkOrderPaid,
+  markOrderReady as apiMarkOrderReady,
+  markPreparationComplete as apiMarkPreparationComplete,
+  validateDelivery as apiValidateDelivery,
   fetchWorkspaceSnapshot,
   createSignedUrlsForPaths,
   subscribeToWorkspaceChanges,
@@ -110,8 +116,8 @@ export function AppProvider({ children }) {
   const [authError, setAuthError] = useState('');
 
   // ── Patient state ──
-  const [patientOrders, setPatientOrders] = useState(persisted?.patientOrders || []);
-  const [activeOrderId, setActiveOrderId] = useState(persisted?.activeOrderId || null);
+  const [patientOrders, setPatientOrders] = useState(isSupabaseConfigured ? [] : persisted?.patientOrders || []);
+  const [activeOrderId, setActiveOrderId] = useState(isSupabaseConfigured ? null : persisted?.activeOrderId || null);
 
   useEffect(() => {
     try {
@@ -145,17 +151,13 @@ export function AppProvider({ children }) {
         ]);
         if (!isMounted) return;
 
-        const normalizedOrders = await refreshOrderPreviews(orders);
+        const nextOrders = await refreshOrderPreviews(orders);
         if (!isMounted) return;
-        const fallbackOrders = Array.isArray(persisted?.patientOrders) ? persisted.patientOrders : [];
-        const nextOrders = normalizedOrders.length > 0
-          ? normalizedOrders
-          : await refreshOrderPreviews(fallbackOrders);
 
         setRole(workspace.role);
         setUser(workspace.user);
         setOwnedPharmacy(workspace.ownedPharmacy);
-        setPatientOrders(nextOrders.length > 0 ? nextOrders : []);
+        setPatientOrders(nextOrders);
         setActiveOrderId(currentActiveOrderId => {
           if (currentActiveOrderId && nextOrders.some(order => order.id === currentActiveOrderId)) {
             return currentActiveOrderId;
@@ -195,7 +197,7 @@ export function AppProvider({ children }) {
 
         refreshOrderPreviews(orders).then((normalizedOrders) => {
           if (!isMounted) return;
-          setPatientOrders(prevOrders => (normalizedOrders.length > 0 ? normalizedOrders : prevOrders));
+          setPatientOrders(normalizedOrders);
           setActiveOrderId(currentActiveOrderId => {
             if (currentActiveOrderId && normalizedOrders.some(order => order.id === currentActiveOrderId)) {
               return currentActiveOrderId;
@@ -214,6 +216,10 @@ export function AppProvider({ children }) {
   }, []);
 
   useEffect(() => {
+    if (isSupabaseConfigured) {
+      return undefined;
+    }
+
     const onStorage = (event) => {
       if (event.key !== STORAGE_KEY) return;
 
@@ -271,7 +277,7 @@ export function AppProvider({ children }) {
         name: displayName || 'Pharmacie Lumen',
         id: 'PHAR-001',
         pharmacyId: 1,
-        email: email || 'pharmacien@ordotogo.tg',
+        email: email || 'pharmacielumen@gmail.com',
         role: 'pharmacist',
       });
       return { error: null };
@@ -345,7 +351,7 @@ export function AppProvider({ children }) {
 
     try {
       const userId = user?.id;
-      const { data, error } = await apiCreatePatientOrder({ userId, pharmacyId: pharmacy.id, file, previewUrl });
+      const { data, error } = await apiCreatePatientOrder({ userId, pharmacyId: pharmacy.id, file, previewUrl: null });
       if (error) {
         throw error;
       }
@@ -397,7 +403,22 @@ export function AppProvider({ children }) {
     }));
   };
 
-  const submitTranscription = ({ orderId, meds, conseil, total }) => {
+  const submitTranscription = async ({ orderId, meds, conseil, total }) => {
+    if (isSupabaseConfigured) {
+      const { error } = await apiSubmitTranscription({
+        orderId,
+        pharmacistId: user?.id || null,
+        meds,
+        conseil,
+        total,
+      });
+
+      if (error) return false;
+
+      await refreshWorkspace();
+      return true;
+    }
+
     updateOrder(orderId, {
       meds,
       conseil,
@@ -405,20 +426,47 @@ export function AppProvider({ children }) {
       status: STATUS.WAITING_VALIDATION,
     });
     setActiveOrderId(orderId);
+    return true;
   };
 
-  const markOrderValidated = (orderId, meds, total) => {
+  const markOrderValidated = async (orderId, meds, total) => {
+    if (isSupabaseConfigured) {
+      const { error } = await apiMarkOrderValidated(orderId, meds, total);
+      if (error) return false;
+
+      updateOrder(orderId, {
+        status: STATUS.VALIDATED,
+        meds,
+        total,
+      });
+      setActiveOrderId(orderId);
+      await refreshWorkspace();
+      return true;
+    }
+
     updateOrder(orderId, {
       status: STATUS.VALIDATED,
       meds,
       total,
     });
     setActiveOrderId(orderId);
+    return true;
   };
 
-  const markOrderPaid = (orderId, paymentMethod) => {
+  const markOrderPaid = async (orderId, paymentMethod) => {
+    if (isSupabaseConfigured) {
+      const { error } = await apiMarkOrderPaid(orderId, paymentMethod);
+      if (error) return false;
+
+      updateOrder(orderId, { status: STATUS.PAID, paymentMethod });
+      setActiveOrderId(orderId);
+      await refreshWorkspace();
+      return true;
+    }
+
     updateOrder(orderId, { status: STATUS.PAID, paymentMethod });
     setActiveOrderId(orderId);
+    return true;
   };
 
   // Génère un code de 6 chiffres aléatoire
@@ -436,23 +484,43 @@ export function AppProvider({ children }) {
   };
 
   // Marque la préparation comme terminée et génère les codes
-  const markPreparationComplete = (orderId) => {
+  const markPreparationComplete = async (orderId) => {
+    if (isSupabaseConfigured) {
+      const { error } = await apiMarkPreparationComplete(orderId);
+      if (error) return false;
+
+      await refreshWorkspace();
+      return true;
+    }
+
     const pickupCode = generatePickupCode();
     const qrCodeData = generateQRCodeData(orderId, pickupCode);
-    
+
     updateOrder(orderId, {
       status: STATUS.READY_FOR_PICKUP,
       pickupCode,
       qrCode: qrCodeData,
       readyAt: new Date().toISOString(),
     });
+    return true;
   };
 
   // Valide la livraison avec le code de récupération
-  const validateDelivery = (orderId, submittedCode) => {
+  const validateDelivery = async (orderId, submittedCode) => {
+    if (isSupabaseConfigured) {
+      const { data, error } = await apiValidateDelivery(orderId, submittedCode);
+      if (error) return false;
+
+      if (data) {
+        await refreshWorkspace();
+      }
+
+      return Boolean(data);
+    }
+
     const order = getOrderById(orderId);
     if (!order) return false;
-    
+
     // Vérifie si le code soumis correspond au code de récupération
     if (order.pickupCode === submittedCode) {
       updateOrder(orderId, {
@@ -461,12 +529,33 @@ export function AppProvider({ children }) {
       });
       return true;
     }
-    
+
     return false;
   };
 
-  const markOrderReady = (orderId) => {
+  const markOrderReady = async (orderId) => {
+    if (isSupabaseConfigured) {
+      const { error } = await apiMarkOrderReady(orderId);
+      if (error) {
+        const msg = String(error?.message || '').toLowerCase();
+        const rpcMissing = msg.includes('mark_order_ready') || error?.code === '42883';
+        if (rpcMissing) {
+          // RPC not deployed on the Supabase instance — fallback to local optimistic update
+          updateOrder(orderId, { status: STATUS.PREPARING });
+          setActiveOrderId(orderId);
+          return true;
+        }
+        return false;
+      }
+
+      updateOrder(orderId, { status: STATUS.PREPARING });
+      setActiveOrderId(orderId);
+      await refreshWorkspace();
+      return true;
+    }
+
     updateOrder(orderId, { status: STATUS.PREPARING });
+    return true;
   };
 
   const markOrderDelivered = (orderId) => {

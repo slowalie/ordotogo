@@ -96,21 +96,112 @@ function mapSnapshotOrderRow(row, itemsByOrderId, signedUrlsByPath = {}) {
   }, itemsByOrderId, signedUrlsByPath);
 }
 
+function buildPrescriptionPathCandidates(rawPath) {
+  const value = String(rawPath || '').trim();
+  if (!value) return [];
+
+  const candidates = new Set([value]);
+  const withoutLeadingSlash = value.startsWith('/') ? value.slice(1) : value;
+  candidates.add(withoutLeadingSlash);
+
+  if (withoutLeadingSlash.startsWith(`${PRESCRIPTION_BUCKET}/`)) {
+    candidates.add(withoutLeadingSlash.slice(PRESCRIPTION_BUCKET.length + 1));
+  }
+
+  try {
+    const decoded = decodeURIComponent(withoutLeadingSlash);
+    candidates.add(decoded);
+    if (decoded.startsWith(`${PRESCRIPTION_BUCKET}/`)) {
+      candidates.add(decoded.slice(PRESCRIPTION_BUCKET.length + 1));
+    }
+  } catch (error) {
+    // Ignore malformed URI components.
+  }
+
+  const marker = `/storage/v1/object/`;
+  if (withoutLeadingSlash.includes(marker)) {
+    const parts = withoutLeadingSlash.split(marker);
+    const tail = parts[parts.length - 1] || '';
+    if (tail.startsWith(`${PRESCRIPTION_BUCKET}/`)) {
+      candidates.add(tail.slice(PRESCRIPTION_BUCKET.length + 1));
+    }
+  }
+
+  return [...candidates].filter(Boolean);
+}
+
 export async function createSignedUrlsForPaths(paths) {
   const signedUrls = {};
   const uniquePaths = [...new Set(paths.filter(Boolean))];
 
   await Promise.all(uniquePaths.map(async (path) => {
-    const { data, error } = await supabase.storage
-      .from(PRESCRIPTION_BUCKET)
-      .createSignedUrl(path, 24 * 60 * 60);
+    const candidates = buildPrescriptionPathCandidates(path);
 
-    if (!error && data?.signedUrl) {
-      signedUrls[path] = data.signedUrl;
+    for (const candidate of candidates) {
+        const { data, error } = await supabase.storage
+          .from(PRESCRIPTION_BUCKET)
+          .createSignedUrl(candidate, 24 * 60 * 60);
+
+        if (error) {
+          console.error('createSignedUrl error for candidate', candidate, error);
+        }
+
+        if (!error && data?.signedUrl) {
+          signedUrls[path] = data.signedUrl;
+          break;
+        }
     }
   }));
 
   return signedUrls;
+}
+
+export async function createObjectUrlForPrescriptionPath(path) {
+  if (!isSupabaseConfigured || !path) return '';
+
+  const candidates = buildPrescriptionPathCandidates(path);
+  for (const candidate of candidates) {
+    const { data, error } = await supabase.storage
+      .from(PRESCRIPTION_BUCKET)
+      .download(candidate);
+
+    if (!error && data) {
+      return URL.createObjectURL(data);
+    }
+  }
+
+  return '';
+}
+
+export async function findObjectsMatchingCandidates(path) {
+  if (!isSupabaseConfigured || !path) return {};
+
+  const candidates = buildPrescriptionPathCandidates(path);
+  const hits = {};
+
+  for (const candidate of candidates) {
+    // split candidate into directory and filename to list directory contents
+    const idx = candidate.lastIndexOf('/');
+    const dir = idx >= 0 ? candidate.slice(0, idx) : '';
+    const name = idx >= 0 ? candidate.slice(idx + 1) : candidate;
+
+    try {
+      const { data, error } = await supabase.storage.from(PRESCRIPTION_BUCKET).list(dir, { limit: 1000 });
+      if (error) {
+        console.error('list error for dir', dir, error);
+        hits[candidate] = { exists: false, error: String(error) };
+        continue;
+      }
+
+      const found = Array.isArray(data) && data.some(item => item.name === name);
+      hits[candidate] = { exists: !!found, dir, name, objects: data || [] };
+    } catch (err) {
+      console.error('findObjectsMatchingCandidates error', candidate, err);
+      hits[candidate] = { exists: false, error: String(err) };
+    }
+  }
+
+  return hits;
 }
 
 export async function getCurrentSession() {
@@ -431,15 +522,6 @@ export async function createPatientOrder({ userId, pharmacyId, file, previewUrl 
 }
 
 async function replaceOrderItems(orderId, meds) {
-  const deleteResult = await supabase
-    .from('order_items')
-    .delete()
-    .eq('order_id', orderId);
-
-  if (deleteResult.error) {
-    return deleteResult;
-  }
-
   if (!meds?.length) {
     return { data: null, error: null };
   }
@@ -454,9 +536,50 @@ async function replaceOrderItems(orderId, meds) {
     duration: med.duree || null,
   }));
 
-  return supabase
+  const { data: existingItems, error: fetchError } = await supabase
     .from('order_items')
-    .insert(rows);
+    .select('id, created_at')
+    .eq('order_id', orderId)
+    .order('created_at', { ascending: true });
+
+  if (fetchError) {
+    return { data: null, error: fetchError };
+  }
+
+  const existingRows = Array.isArray(existingItems) ? existingItems : [];
+
+  if (existingRows.length === 0) {
+    return supabase
+      .from('order_items')
+      .insert(rows);
+  }
+
+  const updateCount = Math.min(existingRows.length, rows.length);
+  for (let index = 0; index < updateCount; index += 1) {
+    const currentRow = existingRows[index];
+    const nextRow = rows[index];
+    const { error } = await supabase
+      .from('order_items')
+      .update(nextRow)
+      .eq('id', currentRow.id);
+
+    if (error) {
+      return { data: null, error };
+    }
+  }
+
+  if (rows.length > existingRows.length) {
+    const extraRows = rows.slice(existingRows.length);
+    const insertResult = await supabase
+      .from('order_items')
+      .insert(extraRows);
+
+    if (insertResult.error) {
+      return insertResult;
+    }
+  }
+
+  return { data: null, error: null };
 }
 
 export async function submitTranscription({ orderId, pharmacistId, meds, conseil, total }) {
@@ -464,21 +587,15 @@ export async function submitTranscription({ orderId, pharmacistId, meds, conseil
     return { error: new Error('Supabase n\'est pas configuré') };
   }
 
-  const itemsResult = await replaceOrderItems(orderId, meds || []);
-  if (itemsResult.error) return { error: itemsResult.error };
+  const { data, error } = await supabase.rpc('submit_transcription', {
+    p_order_id: orderId,
+    p_pharmacist_id: pharmacistId || null,
+    p_conseil: conseil || '',
+    p_total_xof: total || 0,
+    p_meds: meds || [],
+  });
 
-  const { error } = await supabase
-    .from('orders')
-    .update({
-      pharmacist_id: pharmacistId || null,
-      conseil: conseil || '',
-      total_xof: total || 0,
-      status: 'waiting_validation',
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', orderId);
-
-  return { error: error || null };
+  return { data: Boolean(data), error: error || null };
 }
 
 export async function markOrderValidated(orderId, meds, total) {
@@ -486,23 +603,13 @@ export async function markOrderValidated(orderId, meds, total) {
     return { error: new Error('Supabase n\'est pas configuré') };
   }
 
-  const { error } = await supabase
-    .from('orders')
-    .update({
-      status: 'validated',
-      total_xof: total || 0,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', orderId);
+  const { data, error } = await supabase.rpc('confirm_patient_validation', {
+    p_order_id: orderId,
+    p_total_xof: total || 0,
+    p_meds: meds || [],
+  });
 
-  if (error) return { error };
-
-  if (meds?.length) {
-    const itemsResult = await replaceOrderItems(orderId, meds);
-    if (itemsResult.error) return { error: itemsResult.error };
-  }
-
-  return { error: null };
+  return { data: Boolean(data), error: error || null };
 }
 
 export async function markOrderPaid(orderId, paymentMethod) {
@@ -510,17 +617,12 @@ export async function markOrderPaid(orderId, paymentMethod) {
     return { error: new Error('Supabase n\'est pas configuré') };
   }
 
-  const { error } = await supabase
-    .from('orders')
-    .update({
-      status: 'paid',
-      payment_method: paymentMethod,
-      paid_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', orderId);
+  const { data, error } = await supabase.rpc('confirm_patient_payment', {
+    p_order_id: orderId,
+    p_payment_method: paymentMethod,
+  });
 
-  return { error: error || null };
+  return { data: Boolean(data), error: error || null };
 }
 
 export async function markOrderReady(orderId) {
@@ -528,15 +630,11 @@ export async function markOrderReady(orderId) {
     return { error: new Error('Supabase n\'est pas configuré') };
   }
 
-  const { error } = await supabase
-    .from('orders')
-    .update({
-      status: 'preparing',
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', orderId);
+  const { data, error } = await supabase.rpc('mark_order_ready', {
+    p_order_id: orderId,
+  });
 
-  return { error: error || null };
+  return { data: Boolean(data), error: error || null };
 }
 
 export async function markPreparationComplete(orderId) {

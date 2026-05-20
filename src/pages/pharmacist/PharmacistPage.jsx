@@ -71,15 +71,20 @@ export default function PharmacistPage() {
     setSentSuccess(false);
   };
 
-  const handleSent = (payload) => {
+  const handleSent = async (payload) => {
     if (!selectedAlert) return;
-    submitTranscription({
+    const isSaved = await submitTranscription({
       orderId: selectedAlert.id,
       meds: payload.meds,
       conseil: payload.conseil,
       total: payload.total,
     });
-    setSentSuccess(true);
+
+    if (isSaved) {
+      setSentSuccess(true);
+    }
+
+    return isSaved;
   };
 
   const handleBackFromCreate = () => {

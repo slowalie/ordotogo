@@ -14,7 +14,7 @@ const PAYMENT_METHODS = [
     text:  'var(--blue-800)',
   },
   {
-    id:    'pharmacie',
+    id:    'pharmacy',
     icon:  'shop',
     name:  'En pharmacie',
     desc:  'Payer à la récupération',
@@ -26,17 +26,24 @@ const PAYMENT_METHODS = [
 ];
 
 export default function PaiementOrdonnance({ pharmacyId, meds = [], total = 0, onConfirm }) {
-  const [method,  setMethod]  = useState(null);
+  const [method,  setMethod]  = useState('pharmacy');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
   const pharmacy = PHARMACIES.find(p => p.id === pharmacyId) || PHARMACIES[0];
   const selected = PAYMENT_METHODS.find(m => m.id === method);
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
+    if (!method || loading) return;
+    setError('');
     setLoading(true);
-    setTimeout(() => {
+    try {
+      const saved = await onConfirm(method);
+      if (saved === false) {
+        setError('Impossible de confirmer la récupération pour le moment.');
+      }
+    } finally {
       setLoading(false);
-      onConfirm(method);
-    }, 1600);
+    }
   };
 
   return (
@@ -126,6 +133,11 @@ export default function PaiementOrdonnance({ pharmacyId, meds = [], total = 0, o
             : 'Confirmer la récupération →'
           }
         </Button>
+        {error && (
+          <div style={{ marginTop: '10px', fontSize: '13px', color: 'var(--coral-600)' }}>
+            {error}
+          </div>
+        )}
       </Card>
     </div>
   );

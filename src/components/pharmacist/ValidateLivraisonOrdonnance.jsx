@@ -18,13 +18,13 @@ export default function ValidateLivraisonOrdonnance() {
     ? patientOrders.find(o => o.id === selectedOrderId)
     : null;
 
-  const handleValidate = () => {
+  const handleValidate = async () => {
     if (!selectedOrder || !inputCode.trim()) {
       setValidationResult('error');
       return;
     }
 
-    const isValid = validateDelivery(selectedOrder.id, inputCode.trim());
+    const isValid = await validateDelivery(selectedOrder.id, inputCode.trim());
     
     if (isValid) {
       setValidationResult('success');
