@@ -3,9 +3,18 @@ import { Card, Badge, Button, EmptyState, Avatar } from '../shared/UI';
 import { BiIcon } from '../shared/UI';
 import { isUsablePrescriptionUrl, resolvePrescriptionPreviewUrl } from '../../services/supabaseApi';
 
-function isPdfPreview(alert, resolvedPreview) {
+function getFileKind(alert, resolvedPreview) {
   const source = `${alert?.prescriptionFileName || ''} ${alert?.prescriptionFilePath || ''} ${resolvedPreview || ''}`;
-  return /\.pdf(?:$|[?#])/i.test(source);
+  if (/\.pdf(?:$|[?#])/i.test(source)) return 'pdf';
+  if (/\.docx?(?:$|[?#])/i.test(source)) return 'doc';
+  if (/\.(png|jpe?g|gif|webp|bmp|svg)(?:$|[?#])/i.test(source) || /^data:image\//i.test(source) || /^blob:/i.test(resolvedPreview || '')) return 'image';
+  return 'unknown';
+}
+
+function getDocViewerUrl(previewUrl) {
+  if (!previewUrl) return '';
+  if (String(previewUrl).startsWith('blob:') || String(previewUrl).startsWith('data:')) return '';
+  return `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(previewUrl)}`;
 }
 
 function timeAgo(isoStr) {
@@ -44,7 +53,8 @@ export default function AlertesPharmacie({ alerts = [], onTreat }) {
 function AlertCard({ alert, onTreat }) {
   const [resolvedPreview, setResolvedPreview] = useState('');
   const [previewOpen, setPreviewOpen] = useState(false);
-  const previewIsPdf = useMemo(() => isPdfPreview(alert, resolvedPreview), [alert, resolvedPreview]);
+  const fileKind = useMemo(() => getFileKind(alert, resolvedPreview), [alert, resolvedPreview]);
+  const docViewerUrl = useMemo(() => getDocViewerUrl(resolvedPreview), [resolvedPreview]);
 
   useEffect(() => {
     let isMounted = true;
@@ -105,14 +115,31 @@ function AlertCard({ alert, onTreat }) {
       {/* Photo preview */}
       <div className="alert-card__body">
         {resolvedPreview ? (
-          <button
-            type="button"
-            className="alert-card__photo-preview"
-            title="Cliquer pour agrandir"
-            onClick={() => setPreviewOpen(true)}
-          >
-            <img src={resolvedPreview} alt="Ordonnance patient" className="alert-card__photo-img" />
-          </button>
+          fileKind === 'image' ? (
+            <button
+              type="button"
+              className="alert-card__photo-preview"
+              title="Cliquer pour agrandir"
+              onClick={() => setPreviewOpen(true)}
+            >
+              <img src={resolvedPreview} alt="Ordonnance patient" className="alert-card__photo-img" />
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="alert-card__photo-preview"
+              title="Ouvrir l'aperçu"
+              onClick={() => setPreviewOpen(true)}
+              style={{ background: 'var(--gray-50)', border: '1px dashed var(--gray-300)' }}
+            >
+              <div style={{ textAlign: 'center', color: 'var(--gray-700)' }}>
+                <BiIcon name={fileKind === 'pdf' ? 'file-earmark-pdf' : 'file-earmark-word'} size={36} />
+                <div style={{ marginTop: '8px', fontSize: '12px', fontWeight: 600 }}>
+                  {fileKind === 'pdf' ? 'Document PDF' : 'Document Word'}
+                </div>
+              </div>
+            </button>
+          )
         ) : (
           <div className="alert-card__photo">
             <BiIcon name="clipboard" size={32} />
@@ -134,8 +161,15 @@ function AlertCard({ alert, onTreat }) {
 
         <div style={{ display: 'flex', gap: '8px' }}>
           <Button variant="ghost" size="sm" onClick={() => setPreviewOpen(true)}>
-            Agrandir
+            Aperçu
           </Button>
+          {resolvedPreview && (
+            <a href={resolvedPreview} target="_blank" rel="noreferrer" style={{ textDecoration: 'none' }}>
+              <Button variant="ghost" size="sm">
+                Ouvrir le fichier
+              </Button>
+            </a>
+          )}
           <Button fullWidth onClick={onTreat}>
             Traiter cette ordonnance →
           </Button>
@@ -146,7 +180,8 @@ function AlertCard({ alert, onTreat }) {
         <PreviewModal
           title={alert.prescriptionFileName || 'Ordonnance'}
           previewUrl={resolvedPreview}
-          isPdf={previewIsPdf}
+          fileKind={fileKind}
+          docViewerUrl={docViewerUrl}
           onClose={() => setPreviewOpen(false)}
         />
       )}
@@ -154,7 +189,7 @@ function AlertCard({ alert, onTreat }) {
   );
 }
 
-function PreviewModal({ title, previewUrl, isPdf, onClose }) {
+function PreviewModal({ title, previewUrl, fileKind, docViewerUrl, onClose }) {
   useEffect(() => {
     const onKeyDown = (event) => {
       if (event.key === 'Escape') onClose();
@@ -176,10 +211,16 @@ function PreviewModal({ title, previewUrl, isPdf, onClose }) {
         </div>
         <div className="preview-modal__body">
           {previewUrl ? (
-            isPdf ? (
+            fileKind === 'pdf' ? (
               <iframe className="preview-modal__frame" src={previewUrl} title={title} />
-            ) : (
+            ) : fileKind === 'doc' && docViewerUrl ? (
+              <iframe className="preview-modal__frame" src={docViewerUrl} title={title} />
+            ) : fileKind === 'image' ? (
               <img className="preview-modal__image" src={previewUrl} alt={title} />
+            ) : (
+              <div className="preview-modal__empty">
+                Prévisualisation non disponible pour ce format.<br />Utilisez "Ouvrir dans un nouvel onglet".
+              </div>
             )
           ) : (
             <div className="preview-modal__empty">Prévisualisation indisponible</div>

@@ -12,9 +12,18 @@ function getDrugOptions(drugs) {
 
 const defaultMed = () => ({ drugId: '', qty: '1', duree: '7j', posologie: '' });
 
-function isPdfPreview(alert, resolvedPreview) {
+function getFileKind(alert, resolvedPreview) {
   const source = `${alert?.prescriptionFileName || ''} ${alert?.prescriptionFilePath || ''} ${resolvedPreview || ''}`;
-  return /\.pdf(?:$|[?#])/i.test(source);
+  if (/\.pdf(?:$|[?#])/i.test(source)) return 'pdf';
+  if (/\.docx?(?:$|[?#])/i.test(source)) return 'doc';
+  if (/\.(png|jpe?g|gif|webp|bmp|svg)(?:$|[?#])/i.test(source) || /^data:image\//i.test(source) || /^blob:/i.test(resolvedPreview || '')) return 'image';
+  return 'unknown';
+}
+
+function getDocViewerUrl(previewUrl) {
+  if (!previewUrl) return '';
+  if (String(previewUrl).startsWith('blob:') || String(previewUrl).startsWith('data:')) return '';
+  return `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(previewUrl)}`;
 }
 
 export default function CreerOrdonnance({ alert, drugs = [], onSend, onBack }) {
@@ -25,7 +34,8 @@ export default function CreerOrdonnance({ alert, drugs = [], onSend, onBack }) {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [sendError, setSendError] = useState('');
   const drugOptions = useMemo(() => getDrugOptions(drugs), [drugs]);
-  const previewIsPdf = useMemo(() => isPdfPreview(alert, resolvedPreview), [alert, resolvedPreview]);
+  const fileKind = useMemo(() => getFileKind(alert, resolvedPreview), [alert, resolvedPreview]);
+  const docViewerUrl = useMemo(() => getDocViewerUrl(resolvedPreview), [resolvedPreview]);
 
   useEffect(() => {
     let isMounted = true;
@@ -130,7 +140,18 @@ export default function CreerOrdonnance({ alert, drugs = [], onSend, onBack }) {
             <div className="pharma-info-card__photo">
               {resolvedPreview ? (
                 <button type="button" className="pharma-info-card__preview-trigger" title="Cliquer pour agrandir" onClick={() => setPreviewOpen(true)}>
-                  <img src={resolvedPreview} alt="Ordonnance" className="pharma-info-card__preview" />
+                  {fileKind === 'image' ? (
+                    <img src={resolvedPreview} alt="Ordonnance" className="pharma-info-card__preview" />
+                  ) : (
+                    <div style={{ width: '100%', height: '100%', display: 'grid', placeItems: 'center', background: 'var(--gray-50)', color: 'var(--gray-700)' }}>
+                      <div style={{ textAlign: 'center' }}>
+                        <BiIcon name={fileKind === 'pdf' ? 'file-earmark-pdf' : 'file-earmark-word'} size={34} />
+                        <div style={{ marginTop: '6px', fontSize: '12px', fontWeight: 600 }}>
+                          {fileKind === 'pdf' ? 'Aperçu PDF' : 'Aperçu Word'}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </button>
               ) : (
                 <div className="pharma-info-card__photo-box"><BiIcon name="clipboard" /></div>
@@ -138,6 +159,11 @@ export default function CreerOrdonnance({ alert, drugs = [], onSend, onBack }) {
               <div className="pharma-info-card__photo-label" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span>{alert.prescriptionFileName || 'Photo ordonnance'}</span>
                 <Button size="sm" variant="ghost" onClick={() => setPreviewOpen(true)} style={{ marginLeft: 8 }}>Agrandir</Button>
+                {resolvedPreview && (
+                  <a href={resolvedPreview} target="_blank" rel="noreferrer" style={{ textDecoration: 'none' }}>
+                    <Button size="sm" variant="ghost">Ouvrir le fichier</Button>
+                  </a>
+                )}
               </div>
             </div>
           </div>
@@ -148,7 +174,8 @@ export default function CreerOrdonnance({ alert, drugs = [], onSend, onBack }) {
         <PreviewModal
           title={alert?.prescriptionFileName || 'Ordonnance'}
           previewUrl={resolvedPreview}
-          isPdf={previewIsPdf}
+          fileKind={fileKind}
+          docViewerUrl={docViewerUrl}
           onClose={() => setPreviewOpen(false)}
         />
       )}
@@ -247,7 +274,7 @@ export default function CreerOrdonnance({ alert, drugs = [], onSend, onBack }) {
   );
 }
 
-function PreviewModal({ title, previewUrl, isPdf, onClose }) {
+function PreviewModal({ title, previewUrl, fileKind, docViewerUrl, onClose }) {
   useEffect(() => {
     const onKeyDown = (event) => {
       if (event.key === 'Escape') onClose();
@@ -269,10 +296,16 @@ function PreviewModal({ title, previewUrl, isPdf, onClose }) {
         </div>
         <div className="preview-modal__body">
           {previewUrl ? (
-            isPdf ? (
+            fileKind === 'pdf' ? (
               <iframe className="preview-modal__frame" src={previewUrl} title={title} />
-            ) : (
+            ) : fileKind === 'doc' && docViewerUrl ? (
+              <iframe className="preview-modal__frame" src={docViewerUrl} title={title} />
+            ) : fileKind === 'image' ? (
               <img className="preview-modal__image" src={previewUrl} alt={title} />
+            ) : (
+              <div className="preview-modal__empty">
+                Prévisualisation non disponible pour ce format.<br />Utilisez "Ouvrir dans un nouvel onglet".
+              </div>
             )
           ) : (
             <div className="preview-modal__empty">Prévisualisation indisponible</div>
