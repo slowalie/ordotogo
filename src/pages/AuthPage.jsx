@@ -1,21 +1,9 @@
+
 import { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { Button, BiIcon } from '../components/shared/UI';
 
-const roles = [
-  {
-    id:    'patient',
-    icon:  'hospital',
-    label: 'Patient',
-    desc:  'Envoyez vos ordonnances et suivez vos traitements',
-  },
-  {
-    id:    'pharma',
-    icon:  'capsule-pill',
-    label: 'Pharmacien',
-    desc:  'Gérez les prescriptions et préparez les commandes',
-  },
-];
+// Le tableau 'roles' inutile a été supprimé.
 
 const stats = [
   { value: '3x', label: 'Types d’utilisateurs' },
@@ -106,54 +94,31 @@ const features = [
   },
 ];
 
-const demoAccounts = {
-  patient: {
-    role: 'patient',
-    label: 'Patient démo',
-    name: 'Patient Démo',
-    email: 'patient@ordotogo.tg',
-    password: 'demo123',
-  },
-  lumen: {
-    role: 'pharma',
-    label: 'Pharmacie Lumen',
-    name: 'Pharmacie Lumen',
-    email: 'pharmacielumen@gmail.com',
-    password: '123456789',
-  },
-};
-
 export default function AuthPage() {
   const { login, registerPatient, authError } = useApp();
-  const [selected, setSelected] = useState(null);
+  
+  // Suppression du state "selected" qui ne servait à rien
   const [loginOpen, setLoginOpen] = useState(false);
   const [authMode, setAuthMode] = useState('login');
   const [role, setRole] = useState('patient');
+  
+  // Champs du formulaire
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  
+  // Gestion des erreurs et succès
   const [loginError, setLoginError] = useState('');
   const [signupError, setSignupError] = useState('');
   const [signupSuccess, setSignupSuccess] = useState('');
-  const [demoLabel, setDemoLabel] = useState('');
 
-  const fillDemoAccount = (account) => {
-    setRole(account.role);
-    setAuthMode('login');
-    setEmail(account.email);
-    setPassword(account.password);
-    setDemoLabel(account.label);
+  const openLogin = (preselectedRole = 'patient') => {
+    setRole(preselectedRole); // Pré-sélectionne le rôle si on vient d'une carte spécifique
+    setAuthMode('login'); // S'assure qu'on ouvre par défaut sur l'onglet connexion
     setLoginError('');
     setSignupError('');
     setSignupSuccess('');
-  };
-
-  const openLogin = () => {
-    setLoginError('');
-    setSignupError('');
-    setSignupSuccess('');
-    setDemoLabel('');
     setLoginOpen(true);
   };
 
@@ -162,7 +127,11 @@ export default function AuthPage() {
     setLoginError('');
     setSignupError('');
     setSignupSuccess('');
-    setDemoLabel('');
+    // On peut aussi vider les champs par sécurité à la fermeture
+    setEmail('');
+    setPassword('');
+    setFullName('');
+    setConfirmPassword('');
   };
 
   const switchAuthMode = (mode) => {
@@ -230,9 +199,9 @@ export default function AuthPage() {
     </svg>
   );
 
-
   return (
     <div style={{ minHeight: '100vh', background: 'var(--gray-50)', color: 'var(--gray-800)' }}>
+      {/* HEADER (inchangé) */}
       <header style={{
         height: '60px',
         background: '#fff',
@@ -262,7 +231,7 @@ export default function AuthPage() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
           <button
             type="button"
-            onClick={openLogin}
+            onClick={() => openLogin('patient')}
             style={{
               border: 'none',
               outline: 'none',
@@ -284,6 +253,7 @@ export default function AuthPage() {
       </header>
 
       <main className="main-content" style={{ padding: '0', margin: '0' }}>
+        {/* HERO SECTION (inchangée) */}
         <section style={{
           background: 'radial-gradient(circle at top right, rgba(10, 120, 90, 0.45), transparent 32%), linear-gradient(135deg, #033d31 0%, #065544 55%, #11635a 100%)',
           color: '#fff',
@@ -305,7 +275,7 @@ export default function AuthPage() {
               </p>
 
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '14px', marginTop: '30px' }}>
-                <Button size="lg" onClick={openLogin} style={{ borderRadius: '14px', padding: '14px 22px', background: '#1fc889', color: '#fff', boxShadow: '0 18px 34px rgba(31, 200, 137, 0.35)' }}>
+                <Button size="lg" onClick={() => openLogin('patient')} style={{ borderRadius: '14px', padding: '14px 22px', background: '#1fc889', color: '#fff', boxShadow: '0 18px 34px rgba(31, 200, 137, 0.35)' }}>
                   Accéder à l’espace →
                 </Button>
                 <a href="#features" style={{ textDecoration: 'none' }}>
@@ -324,11 +294,10 @@ export default function AuthPage() {
                 ))}
               </div>
             </div>
-
-          
           </div>
         </section>
 
+        {/* ACTORS SECTION */}
         <section id="actors" style={{ background: '#fff', padding: '84px 24px 90px' }}>
           <div style={{ maxWidth: '1320px', margin: '0 auto' }}>
             <div style={{ textAlign: 'center', marginBottom: '42px' }}>
@@ -376,10 +345,8 @@ export default function AuthPage() {
                         <Button
                           fullWidth
                           size="lg"
-                          onClick={() => {
-                            setSelected(card.id);
-                              openLogin();
-                          }}
+                          /* ICI : On passe directement l'ID de la carte pour pré-sélectionner le rôle */
+                          onClick={() => openLogin(card.id)}
                           style={{ borderRadius: '12px', background: 'linear-gradient(135deg, var(--green-50) 0%, #e8fbf1 100%)', color: 'var(--green-800)', outline: '1px solid rgba(22, 163, 74, 0.12)' }}
                         >
                           Voir l’interface →
@@ -393,6 +360,7 @@ export default function AuthPage() {
           </div>
         </section>
 
+        {/* FEATURES SECTION (inchangée) */}
         <section id="features" style={{ background: 'linear-gradient(180deg, #05392c 0%, #042b22 100%)', color: '#fff', padding: '88px 24px 100px' }}>
           <div style={{ maxWidth: '1320px', margin: '0 auto' }}>
             <div style={{ textAlign: 'center', marginBottom: '48px' }}>
@@ -415,10 +383,9 @@ export default function AuthPage() {
             </div>
           </div>
         </section>
-
-       
       </main>
 
+      {/* LOGIN MODAL */}
       {loginOpen && (
         <div
           role="presentation"
@@ -631,41 +598,6 @@ export default function AuthPage() {
                 </div>
               )}
 
-              {authMode === 'login' && (
-                <div style={{ marginBottom: '16px', borderRadius: '16px', padding: '16px', background: 'linear-gradient(180deg, var(--gray-50) 0%, #fff 100%)', border: '1px solid var(--gray-100)' }}>
-                  <div style={{ fontSize: '12px', fontWeight: 800, letterSpacing: '0.12em', color: 'var(--gray-400)', textTransform: 'uppercase', marginBottom: '12px' }}>
-                    Comptes de démonstration
-                  </div>
-
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '10px' }}>
-                    {Object.values(demoAccounts).map(account => (
-                      <button
-                        key={account.email}
-                        type="button"
-                        onClick={() => fillDemoAccount(account)}
-                        style={{
-                          borderRadius: '14px',
-                          padding: '12px 14px',
-                          border: demoLabel === account.label ? '1px solid var(--green-600)' : '1px solid var(--gray-200)',
-                          background: demoLabel === account.label ? 'var(--green-50)' : '#fff',
-                          color: 'var(--gray-800)',
-                          textAlign: 'left',
-                          cursor: 'pointer',
-                        }}
-                      >
-                        <div style={{ fontSize: '14px', fontWeight: 700 }}>{account.label}</div>
-                        <div style={{ marginTop: '4px', fontSize: '12px', color: 'var(--gray-400)' }}>{account.email}</div>
-                      </button>
-                    ))}
-                  </div>
-
-                  <div style={{ marginTop: '12px', display: 'grid', gap: '6px', fontSize: '12px', color: 'var(--gray-600)' }}>
-                    <div><strong>Mot de passe :</strong> 123456789</div>
-                    <div>Cliquer sur un compte remplit automatiquement les champs ci-dessus.</div>
-                  </div>
-                </div>
-              )}
-
               <div style={{ display: 'grid', gap: '10px' }}>
                 <button
                   type="submit"
@@ -727,6 +659,7 @@ export default function AuthPage() {
         </div>
       )}
 
+      {/* STYLE (inchangé) */}
       <style>{`
         html {
           scroll-behavior: smooth;
