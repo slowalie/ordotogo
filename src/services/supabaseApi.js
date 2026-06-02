@@ -1,7 +1,286 @@
 import { supabase, isSupabaseConfigured } from '../lib/supabaseClient';
 import { PHARMACIES as MOCK_PHARMACIES } from '../data/mockData';
+import Papa from 'papaparse';
+import * as XLSX from 'xlsx';
 
 const PRESCRIPTION_BUCKET = 'prescriptions';
+
+function parseCsvRows(csvSource) {
+  return new Promise((resolve, reject) => {
+    Papa.parse(csvSource, {
+      header: true,
+      skipEmptyLines: true,
+      complete: (results) => resolve(Array.isArray(results.data) ? results.data : []),
+      error: (error) => reject(error),
+    });
+  });
+}
+
+function parsePrice(value) {
+  if (value == null) return 0;
+  const normalized = String(value).replace(/\s/g, '').replace(',', '.');
+  const parsed = Number.parseFloat(normalized);
+  return Number.isFinite(parsed) ? Math.max(0, Math.round(parsed)) : 0;
+}
+
+function normalizeCip(value) {
+  return String(value || '').trim().replace(/\s+/g, '');
+}
+
+function normalizeHeader(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '');
+}
+
+function getNormalizedRowValue(row, keys) {
+  if (!row || typeof row !== 'object') return '';
+
+  const normalizedKeys = new Set(keys.map(normalizeHeader));
+  const entries = Object.entries(row);
+
+  for (const [key, value] of entries) {
+    if (!normalizedKeys.has(normalizeHeader(key))) continue;
+    if (value !== undefined && value !== null && String(value).trim() !== '') {
+      return value;
+    }
+  }
+
+  return '';
+}
+
+function getRowValue(row, keys) {
+  for (const key of keys) {
+    const value = row?.[key];
+    if (value !== undefined && value !== null && String(value).trim() !== '') {
+      return value;
+    }
+  }
+
+  return '';
+}
+
+function parseStockQuantity(row) {
+  const rawValue = getNormalizedRowValue(row, [
+    'Stock',
+    'STOCK',
+    'stock',
+    'quantity',
+    'Quantity',
+    'QUANTITY',
+    'quantite',
+    'qte',
+    'Quantite',
+    'Quantité',
+    'QUANTITE',
+    'QTE',
+    'QteStock',
+    'QTE_STOCK',
+    'Qte',
+    'QTY',
+    'Qty',
+    'Disponible',
+    'Stock_Disponible',
+  ]);
+
+  const normalized = String(rawValue).replace(/\s/g, '').replace(',', '.');
+  const parsed = Number.parseFloat(normalized);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+async function parseDrugImportRows(file) {
+  const fileName = String(file?.name || '').toLowerCase();
+
+  if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
+    const arrayBuffer = await file.arrayBuffer();
+    const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+    const firstSheetName = workbook.SheetNames?.[0];
+    const firstSheet = firstSheetName ? workbook.Sheets[firstSheetName] : null;
+
+    if (!firstSheet) return [];
+
+    const csv = XLSX.utils.sheet_to_csv(firstSheet, { blankrows: false });
+    return parseCsvRows(csv);
+  }
+
+  return parseCsvRows(file);
+}
+
+export async function uploadPharmacyDrugsCSV(file, pharmacyId, options = {}) {
+  if (!isSupabaseConfigured) {
+    return { success: false, count: 0, skipped: 0, error: new Error('Supabase n\'est pas configuré') };
+  }
+
+  if (!file) {
+    return { success: false, count: 0, skipped: 0, error: new Error('Aucun fichier fourni') };
+  }
+
+  if (!pharmacyId) {
+    return { success: false, count: 0, skipped: 0, error: new Error('pharmacyId est requis') };
+  }
+
+  try {
+    const replaceCatalog = Boolean(options?.replaceCatalog);
+    const rows = await parseDrugImportRows(file);
+    const uniqueByCip = new Map();
+    let skipped = 0;
+
+    rows.forEach((row) => {
+      const cip = normalizeCip(getNormalizedRowValue(row, [
+        'CIP',
+        'cip',
+        'Code13Ref',
+        'code13ref',
+        'CODE13REF',
+        'Code13REF',
+        'Code 13 Ref',
+        'Code 13Ref',
+        'code 13 ref',
+      ]));
+      const name = String(getNormalizedRowValue(row, [
+        'Nom',
+        'name',
+        'Designation',
+        'Désignation',
+        'Intitule',
+        'Libelle',
+      ]) || '').trim();
+      const stockQuantity = parseStockQuantity(row);
+      const pricePublic = parsePrice(getNormalizedRowValue(row, [
+        'Prix_PVTT',
+        'Prix PVTT',
+        'PRIX_PVTT',
+        'prix_pvtt',
+        'PVTT',
+        'Prix Vente TTC',
+        'PrixVenteTTC',
+        'Prix_Public',
+        'Prix Public',
+        'PRIX_PUBLIC',
+        'Prix public',
+      ]));
+
+      if (!cip || !name || stockQuantity <= 0 || pricePublic <= 0) {
+        skipped += 1;
+        return;
+      }
+
+      uniqueByCip.set(cip, {
+        id: `${pharmacyId}-${cip}`,
+        cip,
+        pharmacy_id: pharmacyId,
+        name,
+        price_xof: pricePublic,
+        category: String(getNormalizedRowValue(row, [
+          'CodeForme',
+          'Code Forme',
+          'codeforme',
+          'Categorie',
+          'Catégorie',
+          'Category',
+          'Groupe',
+        ]) || 'Divers').trim() || 'Divers',
+        is_active: true,
+      });
+    });
+
+    const drugsToInsert = Array.from(uniqueByCip.values());
+    const importedCipsSet = new Set(drugsToInsert.map(drug => normalizeCip(drug.cip)));
+
+    if (drugsToInsert.length === 0) {
+      let deactivated = 0;
+
+      if (replaceCatalog) {
+        const { data: activeRows, error: activeRowsError } = await supabase
+          .from('drugs')
+          .select('id')
+          .eq('pharmacy_id', pharmacyId)
+          .eq('is_active', true);
+
+        if (activeRowsError) throw activeRowsError;
+
+        const activeIds = (activeRows || []).map(row => row.id).filter(Boolean);
+        const BATCH_SIZE = 1000;
+        for (let i = 0; i < activeIds.length; i += BATCH_SIZE) {
+          const batchIds = activeIds.slice(i, i + BATCH_SIZE);
+          const { error: disableError } = await supabase
+            .from('drugs')
+            .update({ is_active: false })
+            .in('id', batchIds);
+
+          if (disableError) throw disableError;
+          deactivated += batchIds.length;
+        }
+      }
+
+      return {
+        success: true,
+        count: 0,
+        skipped,
+        deactivated,
+        error: null,
+      };
+    }
+
+    const BATCH_SIZE = 1000;
+    for (let i = 0; i < drugsToInsert.length; i += BATCH_SIZE) {
+      const batch = drugsToInsert.slice(i, i + BATCH_SIZE);
+
+      const { error } = await supabase
+        .from('drugs')
+        .upsert(batch, { onConflict: 'pharmacy_id,cip' });
+
+      if (error) throw error;
+    }
+
+    let deactivated = 0;
+    if (replaceCatalog) {
+      const { data: existingRows, error: existingRowsError } = await supabase
+        .from('drugs')
+        .select('id, cip')
+        .eq('pharmacy_id', pharmacyId)
+        .eq('is_active', true);
+
+      if (existingRowsError) throw existingRowsError;
+
+      const idsToDisable = (existingRows || [])
+        .filter(row => !importedCipsSet.has(normalizeCip(row.cip)))
+        .map(row => row.id)
+        .filter(Boolean);
+
+      const BATCH_SIZE = 1000;
+      for (let i = 0; i < idsToDisable.length; i += BATCH_SIZE) {
+        const batchIds = idsToDisable.slice(i, i + BATCH_SIZE);
+        const { error: disableError } = await supabase
+          .from('drugs')
+          .update({ is_active: false })
+          .in('id', batchIds);
+
+        if (disableError) throw disableError;
+        deactivated += batchIds.length;
+      }
+    }
+
+    return {
+      success: true,
+      count: drugsToInsert.length,
+      skipped,
+      deactivated,
+      error: null,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      count: 0,
+      skipped: 0,
+      deactivated: 0,
+      error,
+    };
+  }
+}
 
 export function isUsablePrescriptionUrl(value) {
   if (!value) return false;
@@ -375,12 +654,14 @@ export async function fetchPharmacies() {
   return { data: pharmacies, error: null };
 }
 
-export async function fetchDrugs() {
+export async function fetchDrugs(pharmacyId) {
   if (!isSupabaseConfigured) return { data: [], error: null };
+  if (!pharmacyId) return { data: [], error: 'pharmacyId est requis' };
 
   const { data, error } = await supabase
     .from('drugs')
-    .select('id, name, price_xof, category, is_active, created_at')
+    .select('id, cip, name, price_xof, category, is_active, created_at, pharmacy_id')
+    .eq('pharmacy_id', pharmacyId)
     .eq('is_active', true)
     .order('name', { ascending: true });
 
@@ -738,10 +1019,10 @@ export async function validateDelivery(orderId, submittedCode) {
   return { data: Boolean(data), error: error || null };
 }
 
-export async function refreshOrdersAndCatalog() {
+export async function refreshOrdersAndCatalog(pharmacyId) {
   const [pharmaciesResult, drugsResult, ordersResult] = await Promise.all([
     fetchPharmacies(),
-    fetchDrugs(),
+    fetchDrugs(pharmacyId),
     fetchOrdersForCurrentUser(),
   ]);
 
