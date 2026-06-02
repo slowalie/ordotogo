@@ -17,7 +17,7 @@ import {
   createSignedUrlsForPaths,
   subscribeToWorkspaceChanges,
 } from '../services/supabaseApi';
-import { isSupabaseConfigured } from '../lib/supabaseClient';
+import { isSupabaseConfigured, supabase } from '../lib/supabaseClient';
 
 const AppContext = createContext(null);
 const STORAGE_KEY = 'ordotogo_app_state_v1';
@@ -301,6 +301,57 @@ export function AppProvider({ children }) {
     }
 
     return { error: null };
+  };
+
+  const registerPatient = async ({ name, email, password }) => {
+    const safeName = String(name || '').trim();
+    const safeEmail = String(email || '').trim();
+    const safePassword = String(password || '');
+
+    if (!safeName || !safeEmail || !safePassword) {
+      const error = new Error('Renseignez votre nom, mail et mot de passe.');
+      setAuthError(error.message);
+      return { error };
+    }
+
+    if (!isSupabaseConfigured) {
+      setRole('patient');
+      setUser({
+        name: safeName,
+        id: `PAT-${Date.now()}`,
+        email: safeEmail,
+        role: 'patient',
+      });
+      return { error: null, message: 'Compte patient créé.' };
+    }
+
+    try {
+      const { error, data } = await supabase.auth.signUp({
+        email: safeEmail,
+        password: safePassword,
+        options: {
+          data: {
+            display_name: safeName,
+            role: 'patient',
+          },
+        },
+      });
+
+      if (error) {
+        setAuthError(error.message || 'Inscription impossible.');
+        return { error };
+      }
+
+      if (data?.session?.user) {
+        return { error: null, message: 'Compte patient créé et connecté.' };
+      }
+
+      return { error: null, message: 'Compte patient créé. Vérifiez votre email pour confirmer le compte.' };
+    } catch (error) {
+      const normalizedError = error instanceof Error ? error : new Error('Inscription impossible.');
+      setAuthError(normalizedError.message);
+      return { error: normalizedError };
+    }
   };
 
   const logout = async () => {
@@ -622,6 +673,7 @@ export function AppProvider({ children }) {
       authReady,
       authError,
       login,
+      registerPatient,
       logout,
       patientOrders, setPatientOrders,
       activeOrder,
