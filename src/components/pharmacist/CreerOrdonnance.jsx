@@ -321,11 +321,18 @@ function PreviewModal({ title, previewUrl, fileKind, docViewerUrl, onClose }) {
   );
 }
 
+import ReactSelect from 'react-select'; // <-- 1. Ajoutez cet import en haut du fichier
+
+// ... (le reste de votre code en haut)
+
 function MedRow({ index, med, drugs = [], drugOptions, onUpdate, onRemove, canRemove }) {
   const getDrugDatabase = () => drugs.length > 0 ? drugs : DRUG_DATABASE;
   const db = getDrugDatabase();
   const drug = db.find(d => d.id === med.drugId);
   const price = drug ? (drugs.length > 0 ? drug.price_xof : drug.price) : 0;
+
+  // 2. Trouver l'option sélectionnée pour que react-select affiche la bonne valeur
+  const selectedOption = drugOptions.find(opt => opt.value === med.drugId) || null;
 
   return (
     <div className="pharma-med-card">
@@ -343,18 +350,32 @@ function MedRow({ index, med, drugs = [], drugOptions, onUpdate, onRemove, canRe
         )}
       </div>
 
-      {/* Drug select */}
-      <Select
-        label="Médicament"
-        value={med.drugId}
-        onChange={v => onUpdate('drugId', v)}
-        options={drugOptions}
-        placeholder="Sélectionner un médicament..."
-      />
+      {/* 3. LE NOUVEAU CHAMP UNIQUE : Recherche + Menu déroulant */}
+      <div style={{ marginBottom: '16px' }}>
+        <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--color-text)', marginBottom: '6px' }}>
+          Rechercher et sélectionner un médicament
+        </label>
+        <ReactSelect
+          options={drugOptions}
+          value={selectedOption}
+          onChange={(selected) => onUpdate('drugId', selected ? selected.value : '')}
+          isSearchable={true}
+          placeholder="Tapez le nom du médicament..."
+          noOptionsMessage={() => "Aucun médicament trouvé"}
+          styles={{
+            control: (base) => ({
+              ...base,
+              borderColor: 'var(--color-border)',
+              boxShadow: 'none',
+              '&:hover': { borderColor: 'var(--green-400)' }
+            })
+          }}
+        />
+      </div>
 
       {drug && (
-        <div style={{ fontSize: '11px', color: 'var(--green-600)', marginTop: '4px', fontWeight: 600 }}>
-          {drugs.length > 0 ? drug.category : drug.category} · {price.toLocaleString()} FCFA/unité
+        <div style={{ fontSize: '11px', color: 'var(--green-600)', marginTop: '-8px', marginBottom: '12px', fontWeight: 600 }}>
+          {drug.category} · {price.toLocaleString()} FCFA/unité
         </div>
       )}
 
