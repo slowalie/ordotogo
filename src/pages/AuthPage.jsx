@@ -124,25 +124,35 @@ const demoAccounts = {
 };
 
 export default function AuthPage() {
-  const { login, authError } = useApp();
+  const { login, registerPatient, authError } = useApp();
   const [selected, setSelected] = useState(null);
   const [loginOpen, setLoginOpen] = useState(false);
+  const [authMode, setAuthMode] = useState('login');
   const [role, setRole] = useState('patient');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [loginError, setLoginError] = useState('');
+  const [signupError, setSignupError] = useState('');
+  const [signupSuccess, setSignupSuccess] = useState('');
   const [demoLabel, setDemoLabel] = useState('');
 
   const fillDemoAccount = (account) => {
     setRole(account.role);
+    setAuthMode('login');
     setEmail(account.email);
     setPassword(account.password);
     setDemoLabel(account.label);
     setLoginError('');
+    setSignupError('');
+    setSignupSuccess('');
   };
 
   const openLogin = () => {
     setLoginError('');
+    setSignupError('');
+    setSignupSuccess('');
     setDemoLabel('');
     setLoginOpen(true);
   };
@@ -150,7 +160,16 @@ export default function AuthPage() {
   const closeLogin = () => {
     setLoginOpen(false);
     setLoginError('');
+    setSignupError('');
+    setSignupSuccess('');
     setDemoLabel('');
+  };
+
+  const switchAuthMode = (mode) => {
+    setAuthMode(mode);
+    setLoginError('');
+    setSignupError('');
+    setSignupSuccess('');
   };
 
   const handleLoginSubmit = async (event) => {
@@ -173,6 +192,36 @@ export default function AuthPage() {
     }
 
     closeLogin();
+  };
+
+  const handleSignupSubmit = async (event) => {
+    event.preventDefault();
+
+    if (!fullName.trim() || !email.trim() || !password.trim()) {
+      setSignupError('Renseignez votre nom, mail et mot de passe.');
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setSignupError('Les mots de passe ne correspondent pas.');
+      return;
+    }
+
+    const result = await registerPatient({
+      name: fullName,
+      email: email.trim(),
+      password,
+    });
+
+    if (result?.error) {
+      setSignupError(result.error.message || 'Inscription impossible.');
+      return;
+    }
+
+    setSignupSuccess(result?.message || 'Compte patient créé.');
+    if (!result?.message?.includes('email')) {
+      closeLogin();
+    }
   };
 
   const LogoIcon = () => (
@@ -401,9 +450,37 @@ export default function AuthPage() {
             <div style={{ padding: '24px 24px 18px', background: 'linear-gradient(135deg, #063c31 0%, #0b5a48 100%)', color: '#fff' }}>
               <div style={{ display: 'flex', alignItems: 'start', justifyContent: 'space-between', gap: '16px' }}>
                 <div>
-                  <div style={{ fontFamily: 'var(--font-display)', fontSize: '24px', fontWeight: 700, lineHeight: 1.1 }}>Connexion</div>
+                  <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
+                    {[
+                      { id: 'login', label: 'Connexion' },
+                      { id: 'signup', label: 'Inscription patient' },
+                    ].map(tab => (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        onClick={() => switchAuthMode(tab.id)}
+                        style={{
+                          border: 'none',
+                          borderRadius: '999px',
+                          padding: '8px 12px',
+                          background: authMode === tab.id ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.08)',
+                          color: '#fff',
+                          cursor: 'pointer',
+                          fontSize: '12px',
+                          fontWeight: 700,
+                        }}
+                      >
+                        {tab.label}
+                      </button>
+                    ))}
+                  </div>
+                  <div style={{ fontFamily: 'var(--font-display)', fontSize: '24px', fontWeight: 700, lineHeight: 1.1 }}>
+                    {authMode === 'signup' ? 'Créer un compte patient' : 'Connexion'}
+                  </div>
                   <p style={{ marginTop: '8px', fontSize: '14px', color: 'rgba(255,255,255,0.76)', lineHeight: 1.55 }}>
-                    Entrez votre adresse mail et votre mot de passe pour accéder à votre espace.
+                    {authMode === 'signup'
+                      ? 'Créez un espace patient pour envoyer vos ordonnances et suivre vos demandes.'
+                      : 'Entrez votre adresse mail et votre mot de passe pour accéder à votre espace.'}
                   </p>
                 </div>
 
@@ -428,33 +505,57 @@ export default function AuthPage() {
               </div>
             </div>
 
-            <form onSubmit={handleLoginSubmit} style={{ padding: '22px 24px 24px' }}>
-              <div style={{ display: 'grid', gap: '8px', marginBottom: '16px' }}>
-                <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--gray-600)' }}>Type de compte</div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '10px' }}>
-                  {[
-                    { id: 'patient', label: 'Patient' },
-                    { id: 'pharma', label: 'Pharmacien' },
-                  ].map(option => (
-                    <button
-                      key={option.id}
-                      type="button"
-                      onClick={() => setRole(option.id)}
-                      style={{
-                        borderRadius: '14px',
-                        padding: '12px 14px',
-                        border: role === option.id ? '1px solid var(--green-600)' : '1px solid var(--gray-200)',
-                        background: role === option.id ? 'var(--green-50)' : '#fff',
-                        color: role === option.id ? 'var(--green-800)' : 'var(--gray-600)',
-                        fontWeight: 700,
-                        cursor: 'pointer',
-                      }}
-                    >
-                      {option.label}
-                    </button>
-                  ))}
+            <form onSubmit={authMode === 'signup' ? handleSignupSubmit : handleLoginSubmit} style={{ padding: '22px 24px 24px' }}>
+              {authMode === 'signup' && (
+                <label style={{ display: 'grid', gap: '8px', marginBottom: '14px' }}>
+                  <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--gray-600)' }}>Nom complet</span>
+                  <input
+                    type="text"
+                    value={fullName}
+                    onChange={(event) => setFullName(event.target.value)}
+                    placeholder="Votre nom complet"
+                    autoComplete="name"
+                    style={{
+                      height: '46px',
+                      borderRadius: '12px',
+                      border: '1px solid var(--gray-200)',
+                      padding: '0 14px',
+                      outline: 'none',
+                      fontSize: '15px',
+                      fontFamily: 'var(--font-body)',
+                    }}
+                  />
+                </label>
+              )}
+
+              {authMode === 'login' && (
+                <div style={{ display: 'grid', gap: '8px', marginBottom: '16px' }}>
+                  <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--gray-600)' }}>Type de compte</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '10px' }}>
+                    {[
+                      { id: 'patient', label: 'Patient' },
+                      { id: 'pharma', label: 'Pharmacien' },
+                    ].map(option => (
+                      <button
+                        key={option.id}
+                        type="button"
+                        onClick={() => setRole(option.id)}
+                        style={{
+                          borderRadius: '14px',
+                          padding: '12px 14px',
+                          border: role === option.id ? '1px solid var(--green-600)' : '1px solid var(--gray-200)',
+                          background: role === option.id ? 'var(--green-50)' : '#fff',
+                          color: role === option.id ? 'var(--green-800)' : 'var(--gray-600)',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
 
               <label style={{ display: 'grid', gap: '8px', marginBottom: '14px' }}>
                 <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--gray-600)' }}>Adresse mail</span>
@@ -496,44 +597,74 @@ export default function AuthPage() {
                 />
               </label>
 
-              {(loginError || authError) && (
+              {authMode === 'signup' && (
+                <label style={{ display: 'grid', gap: '8px', marginBottom: '14px' }}>
+                  <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--gray-600)' }}>Confirmer le mot de passe</span>
+                  <input
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(event) => setConfirmPassword(event.target.value)}
+                    placeholder="Confirmez votre mot de passe"
+                    autoComplete="new-password"
+                    style={{
+                      height: '46px',
+                      borderRadius: '12px',
+                      border: '1px solid var(--gray-200)',
+                      padding: '0 14px',
+                      outline: 'none',
+                      fontSize: '15px',
+                      fontFamily: 'var(--font-body)',
+                    }}
+                  />
+                </label>
+              )}
+
+              {(loginError || signupError || signupSuccess || authError) && (
                 <div style={{ marginBottom: '14px', borderRadius: '12px', padding: '10px 12px', background: 'var(--coral-50)', color: 'var(--coral-600)', fontSize: '13px', fontWeight: 600 }}>
-                  {loginError || authError}
+                  {signupSuccess || loginError || signupError || authError}
                 </div>
               )}
 
-              <div style={{ marginBottom: '16px', borderRadius: '16px', padding: '16px', background: 'linear-gradient(180deg, var(--gray-50) 0%, #fff 100%)', border: '1px solid var(--gray-100)' }}>
-                <div style={{ fontSize: '12px', fontWeight: 800, letterSpacing: '0.12em', color: 'var(--gray-400)', textTransform: 'uppercase', marginBottom: '12px' }}>
-                  Comptes de démonstration
+              {authMode === 'signup' && (
+                <div style={{ marginBottom: '16px', borderRadius: '14px', padding: '14px 16px', background: 'linear-gradient(180deg, var(--green-50) 0%, #fff 100%)', border: '1px solid rgba(22, 163, 74, 0.14)', color: 'var(--green-800)', fontSize: '13px', lineHeight: 1.6 }}>
+                  Créez votre compte patient pour accéder ensuite à votre historique, envoyer une ordonnance et suivre le statut de vos demandes.
                 </div>
+              )}
 
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '10px' }}>
-                  {Object.values(demoAccounts).map(account => (
-                    <button
-                      key={account.email}
-                      type="button"
-                      onClick={() => fillDemoAccount(account)}
-                      style={{
-                        borderRadius: '14px',
-                        padding: '12px 14px',
-                        border: demoLabel === account.label ? '1px solid var(--green-600)' : '1px solid var(--gray-200)',
-                        background: demoLabel === account.label ? 'var(--green-50)' : '#fff',
-                        color: 'var(--gray-800)',
-                        textAlign: 'left',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      <div style={{ fontSize: '14px', fontWeight: 700 }}>{account.label}</div>
-                      <div style={{ marginTop: '4px', fontSize: '12px', color: 'var(--gray-400)' }}>{account.email}</div>
-                    </button>
-                  ))}
-                </div>
+              {authMode === 'login' && (
+                <div style={{ marginBottom: '16px', borderRadius: '16px', padding: '16px', background: 'linear-gradient(180deg, var(--gray-50) 0%, #fff 100%)', border: '1px solid var(--gray-100)' }}>
+                  <div style={{ fontSize: '12px', fontWeight: 800, letterSpacing: '0.12em', color: 'var(--gray-400)', textTransform: 'uppercase', marginBottom: '12px' }}>
+                    Comptes de démonstration
+                  </div>
 
-                <div style={{ marginTop: '12px', display: 'grid', gap: '6px', fontSize: '12px', color: 'var(--gray-600)' }}>
-                  <div><strong>Mot de passe :</strong> 123456789</div>
-                  <div>Cliquer sur un compte remplit automatiquement les champs ci-dessus.</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '10px' }}>
+                    {Object.values(demoAccounts).map(account => (
+                      <button
+                        key={account.email}
+                        type="button"
+                        onClick={() => fillDemoAccount(account)}
+                        style={{
+                          borderRadius: '14px',
+                          padding: '12px 14px',
+                          border: demoLabel === account.label ? '1px solid var(--green-600)' : '1px solid var(--gray-200)',
+                          background: demoLabel === account.label ? 'var(--green-50)' : '#fff',
+                          color: 'var(--gray-800)',
+                          textAlign: 'left',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <div style={{ fontSize: '14px', fontWeight: 700 }}>{account.label}</div>
+                        <div style={{ marginTop: '4px', fontSize: '12px', color: 'var(--gray-400)' }}>{account.email}</div>
+                      </button>
+                    ))}
+                  </div>
+
+                  <div style={{ marginTop: '12px', display: 'grid', gap: '6px', fontSize: '12px', color: 'var(--gray-600)' }}>
+                    <div><strong>Mot de passe :</strong> 123456789</div>
+                    <div>Cliquer sur un compte remplit automatiquement les champs ci-dessus.</div>
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div style={{ display: 'grid', gap: '10px' }}>
                 <button
@@ -555,10 +686,25 @@ export default function AuthPage() {
                     textShadow: '0 1px 1px rgba(0, 0, 0, 0.18)',
                   }}
                 >
-                  Se connecter
+                  {authMode === 'signup' ? 'Créer mon compte' : 'Se connecter'}
                 </button>
 
-                <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                <div style={{ display: 'flex', gap: '10px', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    onClick={() => switchAuthMode(authMode === 'signup' ? 'login' : 'signup')}
+                    style={{
+                      border: 'none',
+                      background: 'transparent',
+                      color: 'var(--green-700)',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      padding: 0,
+                    }}
+                  >
+                    {authMode === 'signup' ? 'J’ai déjà un compte' : 'Créer un compte patient'}
+                  </button>
+
                   <button
                     type="button"
                     onClick={closeLogin}
