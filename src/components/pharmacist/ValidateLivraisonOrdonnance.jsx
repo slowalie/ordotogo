@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Card, Button, BiIcon, Badge } from '../shared/UI';
 import { useApp } from '../../context/AppContext';
 import { STATUS } from '../../data/mockData';
@@ -8,6 +8,19 @@ export default function ValidateLivraisonOrdonnance() {
   const [selectedOrderId, setSelectedOrderId] = useState(null);
   const [inputCode, setInputCode] = useState('');
   const [validationResult, setValidationResult] = useState(null); // 'success', 'error', null
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [scannerError, setScannerError] = useState('');
+
+  const videoRef = useRef(null);
+  const streamRef = useRef(null);
+  const detectorRef = useRef(null);
+  const scanFrameRef = useRef(null);
+
+  const isScannerSupported =
+    typeof window !== 'undefined' &&
+    'BarcodeDetector' in window &&
+    typeof navigator !== 'undefined' &&
+    !!navigator.mediaDevices?.getUserMedia;
 
   // Ordonnances prêtes à être livrées
   const readyOrders = patientOrders.filter(order => 
@@ -17,6 +30,24 @@ export default function ValidateLivraisonOrdonnance() {
   const selectedOrder = selectedOrderId 
     ? patientOrders.find(o => o.id === selectedOrderId)
     : null;
+
+  const stopScanner = () => {
+    if (scanFrameRef.current) {
+      cancelAnimationFrame(scanFrameRef.current);
+      scanFrameRef.current = null;
+    }
+
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+
+    setIsScannerOpen(false);
+  };
 
   const handleValidate = async () => {
     if (!selectedOrder || !inputCode.trim()) {
@@ -39,11 +70,85 @@ export default function ValidateLivraisonOrdonnance() {
   const handleScanQRCode = (qrCodeData) => {
     try {
       const data = JSON.parse(qrCodeData);
-      setInputCode(data.pickupCode);
+      if (data?.orderId) {
+        const matchedOrder = readyOrders.find(order => order.id === data.orderId);
+        if (matchedOrder) {
+          setSelectedOrderId(matchedOrder.id);
+        }
+      }
+
+      if (data?.pickupCode) {
+        setInputCode(String(data.pickupCode).trim().toUpperCase());
+        setValidationResult(null);
+      }
     } catch (e) {
-      setInputCode(qrCodeData);
+      setInputCode(String(qrCodeData || '').trim().toUpperCase());
+      setValidationResult(null);
     }
   };
+
+  const startScanner = async () => {
+    if (!isScannerSupported) {
+      setScannerError('Le scan QR n\'est pas supporté sur cet appareil ou navigateur.');
+      return;
+    }
+
+    setScannerError('');
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' } },
+        audio: false,
+      });
+
+      streamRef.current = stream;
+      setIsScannerOpen(true);
+
+      const video = videoRef.current;
+      if (video) {
+        video.srcObject = stream;
+        await video.play();
+      }
+
+      detectorRef.current = new window.BarcodeDetector({ formats: ['qr_code'] });
+
+      const scanFrame = async () => {
+        const currentVideo = videoRef.current;
+        const detector = detectorRef.current;
+
+        if (!currentVideo || !detector || currentVideo.readyState < 2) {
+          scanFrameRef.current = requestAnimationFrame(scanFrame);
+          return;
+        }
+
+        try {
+          const barcodes = await detector.detect(currentVideo);
+          if (barcodes.length > 0 && barcodes[0]?.rawValue) {
+            handleScanQRCode(barcodes[0].rawValue);
+            stopScanner();
+            return;
+          }
+        } catch (error) {
+          setScannerError('Impossible de lire le QR code pour le moment.');
+          stopScanner();
+          return;
+        }
+
+        scanFrameRef.current = requestAnimationFrame(scanFrame);
+      };
+
+      scanFrameRef.current = requestAnimationFrame(scanFrame);
+    } catch (error) {
+      setScannerError('Accès caméra refusé ou indisponible. Autorisez la caméra puis réessayez.');
+      stopScanner();
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      stopScanner();
+    };
+  }, []);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', animation: 'fadeIn .3s both' }}>
@@ -195,6 +300,55 @@ export default function ValidateLivraisonOrdonnance() {
                   />
                   <div style={{ fontSize: '11px', color: 'var(--gray-600)', textAlign: 'center' }}>
                     ou scannez le QR code du patient
+                  </div>
+
+                  <div style={{ marginTop: '12px' }}>
+                    {!isScannerOpen ? (
+                      <Button
+                        variant="secondary"
+                        fullWidth
+                        onClick={startScanner}
+                        disabled={!isScannerSupported}
+                      >
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                          <BiIcon name="qr-code-scan" />
+                          Scanner le QR code
+                        </span>
+                      </Button>
+                    ) : (
+                      <>
+                        <div style={{
+                          borderRadius: 'var(--radius)',
+                          overflow: 'hidden',
+                          border: '1px solid var(--gray-300)',
+                          background: '#000',
+                        }}>
+                          <video
+                            ref={videoRef}
+                            autoPlay
+                            muted
+                            playsInline
+                            style={{ width: '100%', maxHeight: '260px', objectFit: 'cover' }}
+                          />
+                        </div>
+                        <div style={{ marginTop: '8px' }}>
+                          <Button variant="ghost" fullWidth onClick={stopScanner}>
+                            Arrêter le scan
+                          </Button>
+                        </div>
+                      </>
+                    )}
+
+                    {scannerError && (
+                      <div style={{
+                        marginTop: '8px',
+                        fontSize: '12px',
+                        color: 'var(--red-700)',
+                        textAlign: 'center',
+                      }}>
+                        {scannerError}
+                      </div>
+                    )}
                   </div>
                 </div>
 
