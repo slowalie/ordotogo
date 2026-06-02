@@ -10,6 +10,7 @@ import CreerOrdonnance       from '../../components/pharmacist/CreerOrdonnance';
 import PreparationOrdonnances from '../../components/pharmacist/PreparationOrdonnances';
 import ValidateLivraisonOrdonnance from '../../components/pharmacist/ValidateLivraisonOrdonnance';
 import HistoriquePharmacie   from '../../components/pharmacist/HistoriquePharmacie';
+import ImportCataloguePharmacie from '../../components/pharmacist/ImportCataloguePharmacie';
 import StatsDashboard from '../../components/shared/StatsDashboard';
 
 const IconBell = (
@@ -42,26 +43,31 @@ export default function PharmacistPage() {
   const [drugsLoading, setDrugsLoading] = useState(false);
   const pharmacyName = user?.pharmacyName || user?.ownedPharmacy?.name || '';
 
+  const loadDrugs = async () => {
+    const pharmacyId = user?.pharmacyId || user?.ownedPharmacy?.id;
+
+    if (!pharmacyId) {
+      setDrugs([]);
+      return;
+    }
+
+    setDrugsLoading(true);
+    try {
+      const { data } = await fetchDrugs(pharmacyId);
+      setDrugs(data || []);
+    } finally {
+      setDrugsLoading(false);
+    }
+  };
+
   useEffect(() => {
     let isMounted = true;
 
-    const loadDrugs = async () => {
-      setDrugsLoading(true);
-      try {
-        const { data } = await fetchDrugs();
-        if (isMounted) {
-          setDrugs(data || []);
-        }
-      } finally {
-        if (isMounted) {
-          setDrugsLoading(false);
-        }
-      }
-    };
-
-    loadDrugs();
+    loadDrugs().then(() => {
+      if (!isMounted) return;
+    });
     return () => { isMounted = false; };
-  }, []);
+  }, [user?.pharmacyId, user?.ownedPharmacy?.id]);
 
 
 
@@ -99,6 +105,7 @@ export default function PharmacistPage() {
   const tabs = [
     { id: 'alerts',    label: 'Alertes',      icon: 'bell', badge: alerts.length },
     { id: 'create',    label: 'Ordonnance',   icon: 'pencil-square'  },
+    { id: 'catalog',   label: 'Catalogue',    icon: 'upload' },
     { id: 'prep',      label: 'Préparation',  icon: 'flask', badge: waitingValidationCount },
     { id: 'livraison', label: 'Livraison',    icon: 'bag-check', badge: readyForPickupCount },
     { id: 'history',   label: 'Historique',   icon: 'journal-text'  },
@@ -173,6 +180,17 @@ export default function PharmacistPage() {
 
       case 'prep':
         return <PreparationOrdonnances />;
+
+      case 'catalog':
+        return (
+          <ImportCataloguePharmacie
+            pharmacyId={user?.pharmacyId || user?.ownedPharmacy?.id}
+            pharmacyName={pharmacyName}
+            drugsCount={drugs.length}
+            loading={drugsLoading}
+            onImported={loadDrugs}
+          />
+        );
 
       case 'livraison':
         return <ValidateLivraisonOrdonnance />;
