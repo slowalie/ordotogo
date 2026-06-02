@@ -68,11 +68,6 @@ const features = [
     desc: 'Signature cryptographique certifiée du médecin prescripteur.',
   },
   {
-    icon: 'phone',
-    title: 'Mode hors-ligne',
-    desc: 'Interface légère fonctionnant même avec une connexion limitée.',
-  },
-  {
     icon: 'people',
     title: 'Gestion des comptes',
     desc: 'Inscription et vérification d’identité des professionnels de santé.',
@@ -86,11 +81,6 @@ const features = [
     icon: 'lock',
     title: 'Chiffrement end-to-end',
     desc: 'Données médicales chiffrées et conformes aux lois africaines.',
-  },
-  {
-    icon: 'globe-africa',
-    title: 'Multi-canaux',
-    desc: 'SMS, WhatsApp, web et app mobile pour toucher tous les patients.',
   },
 ];
 
@@ -370,7 +360,7 @@ export default function AuthPage() {
               </p>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '18px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '18px' }}>
               {features.map(feature => (
                 <div key={feature.title} id={feature.title === 'Chiffrement end-to-end' ? 'security' : undefined} style={{ borderRadius: '18px', border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.03)', padding: '22px', minHeight: '150px', boxShadow: '0 1px 0 rgba(255,255,255,0.03) inset' }}>
                   <div style={{ width: '38px', height: '38px', borderRadius: '12px', background: 'rgba(31, 200, 137, 0.14)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#1fc889', marginBottom: '18px' }}>
@@ -384,6 +374,21 @@ export default function AuthPage() {
           </div>
         </section>
       </main>
+
+      {/* NOUVEAU FOOTER */}
+      <footer style={{
+        background: '#fff',
+        borderTop: '1px solid rgba(15, 23, 42, 0.08)',
+        padding: '32px 24px',
+        color: 'var(--gray-500)',
+        fontSize: '14px',
+      }}>
+        <div style={{ maxWidth: '1320px', margin: '0 auto', display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '16px' }}>
+          <div>© {new Date().getFullYear()} OrdoTogo. Tous droits réservés.</div>
+          
+          
+        </div>
+      </footer>
 
       {/* LOGIN MODAL */}
       {loginOpen && (
