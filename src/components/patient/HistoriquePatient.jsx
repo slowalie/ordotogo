@@ -1,15 +1,40 @@
 import { Card, Badge, EmptyState } from '../shared/UI';
 import { BiIcon } from '../shared/UI';
-import { MOCK_PATIENT_HISTORY } from '../../data/mockData';
+import { useApp } from '../../context/AppContext';
+import { STATUS } from '../../data/mockData';
+
+function formatHistoryDate(isoDate) {
+  if (!isoDate) return '';
+  return new Date(isoDate).toLocaleDateString('fr-FR', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+}
 
 export default function HistoriquePatient() {
-  if (!MOCK_PATIENT_HISTORY.length) {
+  const { patientOrders } = useApp();
+
+  const deliveredOrders = patientOrders
+    .filter(order => order.status === STATUS.DELIVERED)
+    .sort((a, b) => new Date(b.deliveredAt || b.updatedAt || b.sentAt) - new Date(a.deliveredAt || a.updatedAt || a.sentAt));
+
+  const history = deliveredOrders.map(order => ({
+    id: order.id,
+    pharmacy: order.pharmacyName,
+    date: formatHistoryDate(order.deliveredAt || order.updatedAt || order.sentAt),
+    status: order.status,
+    total: order.total || 0,
+    meds: (order.meds || []).map(med => med.name),
+  }));
+
+  if (!history.length) {
     return <EmptyState icon={<BiIcon name="clipboard" size={40} />} title="Aucune ordonnance" description="Vos ordonnances passées apparaîtront ici." />;
   }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', animation: 'fadeIn .3s both' }}>
-      {MOCK_PATIENT_HISTORY.map(ord => (
+      {history.map(ord => (
         <Card key={ord.id} hover style={{ padding: 0, overflow: 'hidden' }}>
           {/* Header */}
           <div style={{

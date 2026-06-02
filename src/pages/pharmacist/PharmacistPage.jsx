@@ -1,18 +1,69 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useApp } from '../../context/AppContext';
 import Topbar from '../../components/shared/Topbar';
 import TabNav from '../../components/shared/TabNav';
-import { MOCK_ALERTS } from '../../data/mockData';
+import { STATUS } from '../../data/mockData';
+import { fetchDrugs } from '../../services/supabaseApi';
 
 import AlertesPharmacie      from '../../components/pharmacist/AlertesPharmacie';
 import CreerOrdonnance       from '../../components/pharmacist/CreerOrdonnance';
 import PreparationOrdonnances from '../../components/pharmacist/PreparationOrdonnances';
+import ValidateLivraisonOrdonnance from '../../components/pharmacist/ValidateLivraisonOrdonnance';
 import HistoriquePharmacie   from '../../components/pharmacist/HistoriquePharmacie';
+import StatsDashboard from '../../components/shared/StatsDashboard';
+
+const IconBell = (
+  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" style={{ display: 'block' }}>
+    <path d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 10-12 0v3.159c0 .538-.214 1.055-.595 1.436L4 17h5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M13.73 21a2 2 0 01-3.46 0" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
+const IconBox = (
+  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" style={{ display: 'block' }}>
+    <path d="M21 16V8l-9-5-9 5v8l9 5 9-5z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+    <path d="M3.27 6.96L12 12.01l8.73-5.05" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+  </svg>
+);
+
+const IconDoc = (
+  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" style={{ display: 'block' }}>
+    <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+    <path d="M14 2v6h6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+  </svg>
+);
 
 export default function PharmacistPage() {
+  const { alerts, prepOrders, waitingDeliveryOrders, patientOrders, submitTranscription, user } = useApp();
   const [activeTab,    setActiveTab]    = useState('alerts');
-  const [alerts,       setAlerts]       = useState(MOCK_ALERTS);
   const [selectedAlert, setSelectedAlert] = useState(null);
   const [sentSuccess,   setSentSuccess]  = useState(false);
+  const [drugs,        setDrugs]        = useState([]);
+  const [drugsLoading, setDrugsLoading] = useState(false);
+  const pharmacyName = user?.pharmacyName || user?.ownedPharmacy?.name || '';
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadDrugs = async () => {
+      setDrugsLoading(true);
+      try {
+        const { data } = await fetchDrugs();
+        if (isMounted) {
+          setDrugs(data || []);
+        }
+      } finally {
+        if (isMounted) {
+          setDrugsLoading(false);
+        }
+      }
+    };
+
+    loadDrugs();
+    return () => { isMounted = false; };
+  }, []);
+
+
 
   const handleTreat = (alert) => {
     setSelectedAlert(alert);
@@ -20,10 +71,20 @@ export default function PharmacistPage() {
     setSentSuccess(false);
   };
 
-  const handleSent = () => {
-    // Remove alert from list
-    setAlerts(prev => prev.filter(a => a.id !== selectedAlert?.id));
-    setSentSuccess(true);
+  const handleSent = async (payload) => {
+    if (!selectedAlert) return;
+    const isSaved = await submitTranscription({
+      orderId: selectedAlert.id,
+      meds: payload.meds,
+      conseil: payload.conseil,
+      total: payload.total,
+    });
+
+    if (isSaved) {
+      setSentSuccess(true);
+    }
+
+    return isSaved;
   };
 
   const handleBackFromCreate = () => {
@@ -32,12 +93,29 @@ export default function PharmacistPage() {
     setSentSuccess(false);
   };
 
+  const waitingValidationCount = prepOrders.filter(order => order.status === STATUS.PAID).length;
+  const readyForPickupCount = waitingDeliveryOrders.length;
+
   const tabs = [
-    { id: 'alerts',  label: 'Alertes',     icon: 'bell', badge: alerts.length },
-    { id: 'create',  label: 'Ordonnance',  icon: 'pencil-square'  },
-    { id: 'prep',    label: 'Préparation', icon: 'flask', badge: 1 },
-    { id: 'history', label: 'Historique',  icon: 'journal-text'  },
+    { id: 'alerts',    label: 'Alertes',      icon: 'bell', badge: alerts.length },
+    { id: 'create',    label: 'Ordonnance',   icon: 'pencil-square'  },
+    { id: 'prep',      label: 'Préparation',  icon: 'flask', badge: waitingValidationCount },
+    { id: 'livraison', label: 'Livraison',    icon: 'bag-check', badge: readyForPickupCount },
+    { id: 'history',   label: 'Historique',   icon: 'journal-text'  },
   ];
+
+  const deliveredOrders = patientOrders.filter(order => order.status === STATUS.DELIVERED);
+  const pharmaHistory = deliveredOrders; // no default mock history
+  const getStats = () => {
+    const pending = alerts.length;
+    const preparations = prepOrders.length;
+    const historyCount = deliveredOrders.length;
+    return [
+      { label: 'Alertes', value: pending, icon: IconBell, bgColor: '#fffbeb', iconColor: '#d97706', onClick: () => setActiveTab('alerts') },
+      { label: 'Préparations', value: preparations, icon: IconBox, bgColor: '#ffedd5', iconColor: '#ea580c', onClick: () => setActiveTab('prep') },
+      { label: 'Historique', value: historyCount, icon: IconDoc, bgColor: '#f0fdf4', iconColor: '#16a34a', onClick: () => setActiveTab('history') },
+    ];
+  };
 
   const renderContent = () => {
     switch (activeTab) {
@@ -87,6 +165,7 @@ export default function PharmacistPage() {
         return (
           <CreerOrdonnance
             alert={selectedAlert}
+            drugs={drugs}
             onSend={handleSent}
             onBack={handleBackFromCreate}
           />
@@ -94,6 +173,9 @@ export default function PharmacistPage() {
 
       case 'prep':
         return <PreparationOrdonnances />;
+
+      case 'livraison':
+        return <ValidateLivraisonOrdonnance />;
 
       case 'history':
         return <HistoriquePharmacie />;
@@ -108,6 +190,12 @@ export default function PharmacistPage() {
       <Topbar notifCount={alerts.length} />
       <TabNav tabs={tabs} active={activeTab} onChange={setActiveTab} />
       <main className="container" style={{ flex: 1, paddingTop: 'var(--space-md)', paddingBottom: 'var(--space-md)' }}>
+        <h2 style={{ margin: '8px 0 12px', color: 'var(--green-800)', fontFamily: 'var(--font-display)', fontSize: '18px' }}>
+          {pharmacyName ? `Espace ${pharmacyName}` : 'Espace Pharmacien'}
+        </h2>
+        <div style={{ marginBottom: '18px' }}>
+          <StatsDashboard stats={getStats()} columns={3} />
+        </div>
         {renderContent()}
       </main>
     </div>

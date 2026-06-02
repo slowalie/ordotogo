@@ -2,12 +2,6 @@ import { useState } from 'react';
 import { Card, Button, Divider, BiIcon } from '../shared/UI';
 import { PHARMACIES } from '../../data/mockData';
 
-const MOCK_ACCEPTED = [
-  { id: 'amox500', name: 'Amoxicilline 500mg', price: 2800 },
-  { id: 'para1g',  name: 'Paracétamol 1000mg', price: 1200 },
-  { id: 'omep20',  name: 'Oméprazole 20mg',    price: 2100 },
-];
-
 const PAYMENT_METHODS = [
   {
     id:    'mixx',
@@ -20,7 +14,7 @@ const PAYMENT_METHODS = [
     text:  'var(--blue-800)',
   },
   {
-    id:    'pharmacie',
+    id:    'pharmacy',
     icon:  'shop',
     name:  'En pharmacie',
     desc:  'Payer à la récupération',
@@ -31,19 +25,25 @@ const PAYMENT_METHODS = [
   },
 ];
 
-export default function PaiementOrdonnance({ pharmacyId, onConfirm }) {
-  const [method,  setMethod]  = useState(null);
+export default function PaiementOrdonnance({ pharmacyId, meds = [], total = 0, onConfirm }) {
+  const [method,  setMethod]  = useState('pharmacy');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
   const pharmacy = PHARMACIES.find(p => p.id === pharmacyId) || PHARMACIES[0];
-  const total = MOCK_ACCEPTED.reduce((s, m) => s + m.price, 0);
   const selected = PAYMENT_METHODS.find(m => m.id === method);
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
+    if (!method || loading) return;
+    setError('');
     setLoading(true);
-    setTimeout(() => {
+    try {
+      const saved = await onConfirm(method);
+      if (saved === false) {
+        setError('Impossible de confirmer la récupération pour le moment.');
+      }
+    } finally {
       setLoading(false);
-      onConfirm(method);
-    }, 1600);
+    }
   };
 
   return (
@@ -108,9 +108,9 @@ export default function PaiementOrdonnance({ pharmacyId, onConfirm }) {
         <div style={{ fontWeight: 700, fontSize: '14px', color: 'var(--green-800)', marginBottom: '12px' }}>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}><BiIcon name="receipt" />Récapitulatif</span>
         </div>
-        {MOCK_ACCEPTED.map(m => (
+        {meds.map(m => (
           <div key={m.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '6px' }}>
-            <span style={{ color: 'var(--color-text-secondary)' }}>{m.name}</span>
+            <span style={{ color: 'var(--color-text-secondary)' }}>{m.name} × {m.qty || 1}</span>
             <span>{m.price.toLocaleString()} FCFA</span>
           </div>
         ))}
@@ -133,6 +133,11 @@ export default function PaiementOrdonnance({ pharmacyId, onConfirm }) {
             : 'Confirmer la récupération →'
           }
         </Button>
+        {error && (
+          <div style={{ marginTop: '10px', fontSize: '13px', color: 'var(--coral-600)' }}>
+            {error}
+          </div>
+        )}
       </Card>
     </div>
   );

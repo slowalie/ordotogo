@@ -1,5 +1,6 @@
+import { useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import { NotifBadge, Avatar } from './UI';
+import { NotifBadge, Avatar, BiIcon } from './UI';
 
 const Logo = () => (
   <svg width="20" height="20" viewBox="0 0 24 24" fill="white">
@@ -8,7 +9,23 @@ const Logo = () => (
 );
 
 export default function Topbar({ notifCount = 0 }) {
-  const { role, user, logout } = useApp();
+  const { role, user, logout, refreshWorkspace } = useApp();
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const pharmacyName = user?.pharmacyName || user?.ownedPharmacy?.name || '';
+  const workspaceLabel = role === 'pharmacist' && pharmacyName
+    ? `Espace ${pharmacyName}`
+    : role === 'patient'
+      ? 'Espace Patient'
+      : 'Espace Pharmacien';
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await refreshWorkspace();
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   return (
     <header className="app-topbar topbar">
@@ -22,7 +39,7 @@ export default function Topbar({ notifCount = 0 }) {
             OrdoTogo
           </div>
           <div className="brand-subtitle">
-            {role === 'patient' ? 'Espace Patient' : 'Espace Pharmacien'}
+            {workspaceLabel}
           </div>
         </div>
       </div>
@@ -30,6 +47,21 @@ export default function Topbar({ notifCount = 0 }) {
       {/* Right – user + actions */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         {notifCount > 0 && <NotifBadge count={notifCount} />}
+        <button 
+          className="btn-outline" 
+          onClick={handleRefresh}
+          disabled={isRefreshing}
+          title="Rafraîchir les données"
+          style={{ padding: '8px 12px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+        >
+          <BiIcon 
+            name="arrow-clockwise" 
+            style={{ 
+              transform: isRefreshing ? 'rotate(360deg)' : 'rotate(0deg)',
+              transition: 'transform 0.3s ease-in-out',
+            }} 
+          />
+        </button>
         <div className="hide-mobile" style={{ textAlign: 'right' }}>
           <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text)' }}>{user?.name}</div>
           <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{role === 'patient' ? 'Patient' : 'Pharmacien'}</div>

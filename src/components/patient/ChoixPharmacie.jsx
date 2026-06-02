@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import { Card, Badge, Button, SectionHeader, BiIcon } from '../shared/UI';
-import { PHARMACIES } from '../../data/mockData';
 
-export default function ChoixPharmacie({ selected, onSelect, onSend, onBack }) {
+export default function ChoixPharmacie({ pharmacies = [], loading = false, selected, onSelect, onSend, onBack }) {
   const [sending, setSending] = useState(false);
 
   const handleSend = () => {
@@ -24,8 +23,18 @@ export default function ChoixPharmacie({ selected, onSelect, onSend, onBack }) {
         </div>
 
         <SectionHeader>Pharmacies à proximité</SectionHeader>
+        {loading && (
+          <div style={{ padding: '12px 0', fontSize: '13px', color: 'var(--color-text-muted)' }}>
+            Chargement des pharmacies...
+          </div>
+        )}
+        {!loading && pharmacies.length === 0 && (
+          <div style={{ padding: '12px 0', fontSize: '13px', color: 'var(--color-text-muted)' }}>
+            Aucune pharmacie disponible pour le moment.
+          </div>
+        )}
         <div className="pharmacy-list">
-          {PHARMACIES.map(ph => (
+          {pharmacies.map(ph => (
             <PharmacyItem
               key={ph.id}
               pharmacy={ph}
@@ -75,7 +84,8 @@ function PharmacyItem({ pharmacy, isSelected, onSelect }) {
       <div className="pharmacy-item__info">
         <div className="pharmacy-item__name">{pharmacy.name}</div>
         <div className="pharmacy-item__meta">
-          {pharmacy.zone} · {pharmacy.dist}
+          {pharmacy.zone}
+          {pharmacy.phone ? ` · ${pharmacy.phone}` : ''}
         </div>
       </div>
 

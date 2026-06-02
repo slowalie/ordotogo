@@ -1,29 +1,118 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Card, Button, Input, Textarea, Select, Divider, Avatar, BiIcon } from '../shared/UI';
 import { DRUG_DATABASE } from '../../data/mockData';
+import { isUsablePrescriptionUrl, resolvePrescriptionPreviewUrl } from '../../services/supabaseApi';
 
-const drugOptions = DRUG_DATABASE.map(d => ({ value: d.id, label: `${d.name} — ${d.price.toLocaleString()} FCFA` }));
+function getDrugOptions(drugs) {
+  if (!Array.isArray(drugs) || drugs.length === 0) {
+    return DRUG_DATABASE.map(d => ({ value: d.id, label: `${d.name} — ${d.price.toLocaleString()} FCFA` }));
+  }
+  return drugs.map(d => ({ value: d.id, label: `${d.name} — ${d.price_xof.toLocaleString()} FCFA` }));
+}
 
 const defaultMed = () => ({ drugId: '', qty: '1', duree: '7j', posologie: '' });
 
-export default function CreerOrdonnance({ alert, onSend, onBack }) {
+function isPdfPreview(alert, resolvedPreview) {
+  const source = `${alert?.prescriptionFileName || ''} ${alert?.prescriptionFilePath || ''} ${resolvedPreview || ''}`;
+  return /\.pdf(?:$|[?#])/i.test(source);
+}
+
+export default function CreerOrdonnance({ alert, drugs = [], onSend, onBack }) {
   const [meds,    setMeds]    = useState([defaultMed()]);
   const [conseil, setConseil] = useState('');
   const [sending, setSending] = useState(false);
+  const [resolvedPreview, setResolvedPreview] = useState('');
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [sendError, setSendError] = useState('');
+  const drugOptions = useMemo(() => getDrugOptions(drugs), [drugs]);
+  const previewIsPdf = useMemo(() => isPdfPreview(alert, resolvedPreview), [alert, resolvedPreview]);
+
+  useEffect(() => {
+    let isMounted = true;
+    let objectPreviewUrl = '';
+
+    const resolvePreview = async () => {
+      const nextPreview = await resolvePrescriptionPreviewUrl({
+        filePath: alert?.prescriptionFilePath,
+        previewUrl: alert?.prescriptionPreview,
+      });
+
+      if (!isMounted) {
+        if (nextPreview && nextPreview.startsWith('blob:')) URL.revokeObjectURL(nextPreview);
+        return;
+      }
+
+      if (nextPreview && nextPreview.startsWith('blob:')) {
+        if (objectPreviewUrl) URL.revokeObjectURL(objectPreviewUrl);
+        objectPreviewUrl = nextPreview;
+      }
+
+      setResolvedPreview(nextPreview);
+    };
+
+    if (!alert) {
+      setResolvedPreview('');
+      return () => { isMounted = false; };
+    }
+
+    resolvePreview();
+
+    return () => {
+      isMounted = false;
+      if (objectPreviewUrl) URL.revokeObjectURL(objectPreviewUrl);
+    };
+  }, [alert]);
 
   const addMed    = () => setMeds(m => [...m, defaultMed()]);
   const removeMed = (i) => setMeds(m => m.filter((_, idx) => idx !== i));
   const updateMed = (i, field, val) => setMeds(m => m.map((med, idx) => idx === i ? { ...med, [field]: val } : med));
 
+  const getDrugDatabase = () => drugs.length > 0 ? drugs : DRUG_DATABASE;
+
   const validMeds = meds.filter(m => m.drugId && m.qty);
   const total = validMeds.reduce((s, m) => {
-    const drug = DRUG_DATABASE.find(d => d.id === m.drugId);
-    return s + (drug ? drug.price * parseInt(m.qty || 1) : 0);
+    const db = getDrugDatabase();
+    const drug = db.find(d => d.id === m.drugId);
+    const price = drug ? (drugs.length > 0 ? drug.price_xof : drug.price) : 0;
+    return s + (price * parseInt(m.qty || 1));
   }, 0);
 
-  const handleSend = () => {
+  const handleSend = async () => {
+    const db = getDrugDatabase();
+    const medsPayload = validMeds.map((med, index) => {
+      const drug = db.find(d => d.id === med.drugId);
+      const qty = parseInt(med.qty || 1, 10);
+      const price = drug ? (drugs.length > 0 ? drug.price_xof : drug.price) : 0;
+      return {
+        id: `${med.drugId}-${index + 1}`,
+        drugId: med.drugId,
+        name: drug?.name || 'Médicament',
+        qty,
+        duree: med.duree,
+        posologie: med.posologie || `Durée: ${med.duree}`,
+        price: price * qty,
+      };
+    });
+
+    setSendError('');
     setSending(true);
-    setTimeout(() => { setSending(false); onSend(); }, 1500);
+    await new Promise(resolve => setTimeout(resolve, 1500));
+
+    try {
+      const isSent = await onSend({
+        meds: medsPayload,
+        conseil,
+        total,
+      });
+
+      if (!isSent) {
+        setSendError('Impossible d\'envoyer l\'ordonnance. Vérifiez la connexion à la base ou les droits Supabase.');
+      }
+    } catch (error) {
+      setSendError(error?.message || 'Impossible d\'envoyer l\'ordonnance.');
+    } finally {
+      setSending(false);
+    }
   };
 
   return (
@@ -39,11 +128,29 @@ export default function CreerOrdonnance({ alert, onSend, onBack }) {
               <div className="pharma-info-card__id">{alert.patientId}</div>
             </div>
             <div className="pharma-info-card__photo">
-              <div className="pharma-info-card__photo-box"><BiIcon name="clipboard" /></div>
-              <div className="pharma-info-card__photo-label">Voir photo</div>
+              {resolvedPreview ? (
+                <button type="button" className="pharma-info-card__preview-trigger" title="Cliquer pour agrandir" onClick={() => setPreviewOpen(true)}>
+                  <img src={resolvedPreview} alt="Ordonnance" className="pharma-info-card__preview" />
+                </button>
+              ) : (
+                <div className="pharma-info-card__photo-box"><BiIcon name="clipboard" /></div>
+              )}
+              <div className="pharma-info-card__photo-label" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span>{alert.prescriptionFileName || 'Photo ordonnance'}</span>
+                <Button size="sm" variant="ghost" onClick={() => setPreviewOpen(true)} style={{ marginLeft: 8 }}>Agrandir</Button>
+              </div>
             </div>
           </div>
         </Card>
+      )}
+
+      {previewOpen && (
+        <PreviewModal
+          title={alert?.prescriptionFileName || 'Ordonnance'}
+          previewUrl={resolvedPreview}
+          isPdf={previewIsPdf}
+          onClose={() => setPreviewOpen(false)}
+        />
       )}
 
       {/* Medications */}
@@ -58,6 +165,8 @@ export default function CreerOrdonnance({ alert, onSend, onBack }) {
               key={i}
               index={i}
               med={med}
+              drugs={drugs}
+              drugOptions={drugOptions}
               onUpdate={(f, v) => updateMed(i, f, v)}
               onRemove={() => removeMed(i)}
               canRemove={meds.length > 1}
@@ -98,12 +207,14 @@ export default function CreerOrdonnance({ alert, onSend, onBack }) {
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}><BiIcon name="receipt" />Récapitulatif de l'ordonnance</span>
           </div>
           {validMeds.map((m, i) => {
-            const drug = DRUG_DATABASE.find(d => d.id === m.drugId);
+            const db = getDrugDatabase();
+            const drug = db.find(d => d.id === m.drugId);
             if (!drug) return null;
+            const price = drugs.length > 0 ? drug.price_xof : drug.price;
             return (
               <div key={i} className="pharma-summary-row">
                 <span style={{ color: 'var(--color-text-secondary)' }}>{drug.name} × {m.qty}</span>
-                <span>{(drug.price * parseInt(m.qty || 1)).toLocaleString()} FCFA</span>
+                <span>{(price * parseInt(m.qty || 1)).toLocaleString()} FCFA</span>
               </div>
             );
           })}
@@ -112,6 +223,12 @@ export default function CreerOrdonnance({ alert, onSend, onBack }) {
             <span>Total estimé</span>
             <span>{total.toLocaleString()} FCFA</span>
           </div>
+        </Card>
+      )}
+
+      {sendError && (
+        <Card style={{ border: '1px solid var(--coral-200)', background: 'var(--coral-50)', color: 'var(--coral-700)', padding: '12px 16px' }}>
+          {sendError}
         </Card>
       )}
 
@@ -130,8 +247,52 @@ export default function CreerOrdonnance({ alert, onSend, onBack }) {
   );
 }
 
-function MedRow({ index, med, onUpdate, onRemove, canRemove }) {
-  const drug = DRUG_DATABASE.find(d => d.id === med.drugId);
+function PreviewModal({ title, previewUrl, isPdf, onClose }) {
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') onClose();
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [onClose]);
+
+  return (
+    <div className="preview-modal__overlay" role="presentation" onClick={onClose}>
+      <div className="preview-modal" role="dialog" aria-modal="true" aria-label={title} onClick={(event) => event.stopPropagation()}>
+        <div className="preview-modal__header">
+          <div>
+            <div className="preview-modal__title">{title}</div>
+            <div className="preview-modal__subtitle">Prévisualisation agrandie</div>
+          </div>
+          <button type="button" className="btn-outline" onClick={onClose}>Fermer</button>
+        </div>
+        <div className="preview-modal__body">
+          {previewUrl ? (
+            isPdf ? (
+              <iframe className="preview-modal__frame" src={previewUrl} title={title} />
+            ) : (
+              <img className="preview-modal__image" src={previewUrl} alt={title} />
+            )
+          ) : (
+            <div className="preview-modal__empty">Prévisualisation indisponible</div>
+          )}
+        </div>
+        {previewUrl && (
+          <div className="preview-modal__footer">
+            <a className="btn-outline" href={previewUrl} target="_blank" rel="noreferrer">Ouvrir dans un nouvel onglet</a>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function MedRow({ index, med, drugs = [], drugOptions, onUpdate, onRemove, canRemove }) {
+  const getDrugDatabase = () => drugs.length > 0 ? drugs : DRUG_DATABASE;
+  const db = getDrugDatabase();
+  const drug = db.find(d => d.id === med.drugId);
+  const price = drug ? (drugs.length > 0 ? drug.price_xof : drug.price) : 0;
 
   return (
     <div className="pharma-med-card">
@@ -160,7 +321,7 @@ function MedRow({ index, med, onUpdate, onRemove, canRemove }) {
 
       {drug && (
         <div style={{ fontSize: '11px', color: 'var(--green-600)', marginTop: '4px', fontWeight: 600 }}>
-          {drug.category} · {drug.price.toLocaleString()} FCFA/unité
+          {drugs.length > 0 ? drug.category : drug.category} · {price.toLocaleString()} FCFA/unité
         </div>
       )}
 
