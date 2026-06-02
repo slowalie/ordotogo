@@ -1,7 +1,2 @@
 node_modules
 dist
-.env.example
-.env.local
-ordotogo_schema.sql
-.env.local
-scripts
