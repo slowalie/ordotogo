@@ -106,23 +106,6 @@ const features = [
   },
 ];
 
-const demoAccounts = {
-  patient: {
-    role: 'patient',
-    label: 'Patient démo',
-    name: 'Patient Démo',
-    email: 'patient@ordotogo.tg',
-    password: 'demo123',
-  },
-  lumen: {
-    role: 'pharma',
-    label: 'Pharmacie Lumen',
-    name: 'Pharmacie Lumen',
-    email: 'pharmacielumen@gmail.com',
-    password: '123456789',
-  },
-};
-
 export default function AuthPage() {
   const { login, registerPatient, authError } = useApp();
   const [selected, setSelected] = useState(null);
@@ -136,24 +119,11 @@ export default function AuthPage() {
   const [loginError, setLoginError] = useState('');
   const [signupError, setSignupError] = useState('');
   const [signupSuccess, setSignupSuccess] = useState('');
-  const [demoLabel, setDemoLabel] = useState('');
-
-  const fillDemoAccount = (account) => {
-    setRole(account.role);
-    setAuthMode('login');
-    setEmail(account.email);
-    setPassword(account.password);
-    setDemoLabel(account.label);
-    setLoginError('');
-    setSignupError('');
-    setSignupSuccess('');
-  };
 
   const openLogin = () => {
     setLoginError('');
     setSignupError('');
     setSignupSuccess('');
-    setDemoLabel('');
     setLoginOpen(true);
   };
 
@@ -162,7 +132,6 @@ export default function AuthPage() {
     setLoginError('');
     setSignupError('');
     setSignupSuccess('');
-    setDemoLabel('');
   };
 
   const switchAuthMode = (mode) => {
@@ -229,7 +198,6 @@ export default function AuthPage() {
       <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 3c1.93 0 3.5 1.57 3.5 3.5S13.93 13 12 13s-3.5-1.57-3.5-3.5S10.07 6 12 6zm7 13H5v-.23c0-.62.28-1.2.76-1.58C7.47 15.82 9.64 15 12 15s4.53.82 6.24 2.19c.48.38.76.97.76 1.58V19z"/>
     </svg>
   );
-
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--gray-50)', color: 'var(--gray-800)' }}>
@@ -324,8 +292,6 @@ export default function AuthPage() {
                 ))}
               </div>
             </div>
-
-          
           </div>
         </section>
 
@@ -415,8 +381,6 @@ export default function AuthPage() {
             </div>
           </div>
         </section>
-
-       
       </main>
 
       {loginOpen && (
@@ -628,41 +592,6 @@ export default function AuthPage() {
               {authMode === 'signup' && (
                 <div style={{ marginBottom: '16px', borderRadius: '14px', padding: '14px 16px', background: 'linear-gradient(180deg, var(--green-50) 0%, #fff 100%)', border: '1px solid rgba(22, 163, 74, 0.14)', color: 'var(--green-800)', fontSize: '13px', lineHeight: 1.6 }}>
                   Créez votre compte patient pour accéder ensuite à votre historique, envoyer une ordonnance et suivre le statut de vos demandes.
-                </div>
-              )}
-
-              {authMode === 'login' && (
-                <div style={{ marginBottom: '16px', borderRadius: '16px', padding: '16px', background: 'linear-gradient(180deg, var(--gray-50) 0%, #fff 100%)', border: '1px solid var(--gray-100)' }}>
-                  <div style={{ fontSize: '12px', fontWeight: 800, letterSpacing: '0.12em', color: 'var(--gray-400)', textTransform: 'uppercase', marginBottom: '12px' }}>
-                    Comptes de démonstration
-                  </div>
-
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '10px' }}>
-                    {Object.values(demoAccounts).map(account => (
-                      <button
-                        key={account.email}
-                        type="button"
-                        onClick={() => fillDemoAccount(account)}
-                        style={{
-                          borderRadius: '14px',
-                          padding: '12px 14px',
-                          border: demoLabel === account.label ? '1px solid var(--green-600)' : '1px solid var(--gray-200)',
-                          background: demoLabel === account.label ? 'var(--green-50)' : '#fff',
-                          color: 'var(--gray-800)',
-                          textAlign: 'left',
-                          cursor: 'pointer',
-                        }}
-                      >
-                        <div style={{ fontSize: '14px', fontWeight: 700 }}>{account.label}</div>
-                        <div style={{ marginTop: '4px', fontSize: '12px', color: 'var(--gray-400)' }}>{account.email}</div>
-                      </button>
-                    ))}
-                  </div>
-
-                  <div style={{ marginTop: '12px', display: 'grid', gap: '6px', fontSize: '12px', color: 'var(--gray-600)' }}>
-                    <div><strong>Mot de passe :</strong> 123456789</div>
-                    <div>Cliquer sur un compte remplit automatiquement les champs ci-dessus.</div>
-                  </div>
                 </div>
               )}
 
