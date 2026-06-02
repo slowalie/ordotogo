@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Html5Qrcode } from 'html5-qrcode';
 import { Card, Button, BiIcon, Badge } from '../shared/UI';
 import { useApp } from '../../context/AppContext';
 import { STATUS } from '../../data/mockData';
@@ -10,17 +11,11 @@ export default function ValidateLivraisonOrdonnance() {
   const [validationResult, setValidationResult] = useState(null); // 'success', 'error', null
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [scannerError, setScannerError] = useState('');
+  const [scannerPendingStart, setScannerPendingStart] = useState(false);
+  const [scannerStatus, setScannerStatus] = useState('idle'); // 'idle' | 'starting' | 'scanning'
 
-  const videoRef = useRef(null);
-  const streamRef = useRef(null);
-  const detectorRef = useRef(null);
-  const scanFrameRef = useRef(null);
-
-  const isScannerSupported =
-    typeof window !== 'undefined' &&
-    'BarcodeDetector' in window &&
-    typeof navigator !== 'undefined' &&
-    !!navigator.mediaDevices?.getUserMedia;
+  const scannerRef = useRef(null);
+  const scannerElementId = 'pharmacy-qr-scanner';
 
   // Ordonnances prêtes à être livrées
   const readyOrders = patientOrders.filter(order => 
@@ -31,19 +26,24 @@ export default function ValidateLivraisonOrdonnance() {
     ? patientOrders.find(o => o.id === selectedOrderId)
     : null;
 
-  const stopScanner = () => {
-    if (scanFrameRef.current) {
-      cancelAnimationFrame(scanFrameRef.current);
-      scanFrameRef.current = null;
-    }
+  const stopScanner = async () => {
+    setScannerPendingStart(false);
+    setScannerStatus('idle');
 
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
-      streamRef.current = null;
-    }
+    if (scannerRef.current) {
+      try {
+        await scannerRef.current.stop();
+      } catch (error) {
+        // Ignore stop errors when the scanner has already been torn down.
+      }
 
-    if (videoRef.current) {
-      videoRef.current.srcObject = null;
+      try {
+        await scannerRef.current.clear();
+      } catch (error) {
+        // Ignore clear errors for the same reason.
+      }
+
+      scannerRef.current = null;
     }
 
     setIsScannerOpen(false);
@@ -88,67 +88,58 @@ export default function ValidateLivraisonOrdonnance() {
   };
 
   const startScanner = async () => {
-    if (!isScannerSupported) {
-      setScannerError('Le scan QR n\'est pas supporté sur cet appareil ou navigateur.');
-      return;
-    }
-
     setScannerError('');
+    setIsScannerOpen(true);
+    setScannerPendingStart(true);
+  };
+
+  const initializeScanner = async () => {
+    setScannerStatus('starting');
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: 'environment' } },
-        audio: false,
-      });
-
-      streamRef.current = stream;
-      setIsScannerOpen(true);
-
-      const video = videoRef.current;
-      if (video) {
-        video.srcObject = stream;
-        await video.play();
+      if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+        throw new Error('La caméra n\'est pas disponible sur cet appareil ou navigateur.');
       }
 
-      detectorRef.current = new window.BarcodeDetector({ formats: ['qr_code'] });
+      const html5QrCode = new Html5Qrcode(scannerElementId, { verbose: false });
+      scannerRef.current = html5QrCode;
 
-      const scanFrame = async () => {
-        const currentVideo = videoRef.current;
-        const detector = detectorRef.current;
+      await html5QrCode.start(
+        { facingMode: 'environment' },
+        {
+          fps: 10,
+          qrbox: { width: 240, height: 240 },
+          aspectRatio: 1,
+        },
+        async (decodedText) => {
+          handleScanQRCode(decodedText);
+          await stopScanner();
+        },
+        () => {}
+      );
 
-        if (!currentVideo || !detector || currentVideo.readyState < 2) {
-          scanFrameRef.current = requestAnimationFrame(scanFrame);
-          return;
-        }
-
-        try {
-          const barcodes = await detector.detect(currentVideo);
-          if (barcodes.length > 0 && barcodes[0]?.rawValue) {
-            handleScanQRCode(barcodes[0].rawValue);
-            stopScanner();
-            return;
-          }
-        } catch (error) {
-          setScannerError('Impossible de lire le QR code pour le moment.');
-          stopScanner();
-          return;
-        }
-
-        scanFrameRef.current = requestAnimationFrame(scanFrame);
-      };
-
-      scanFrameRef.current = requestAnimationFrame(scanFrame);
+      setScannerStatus('scanning');
     } catch (error) {
-      setScannerError('Accès caméra refusé ou indisponible. Autorisez la caméra puis réessayez.');
-      stopScanner();
+      setScannerError(
+        error?.message || 'Accès caméra refusé ou indisponible. Autorisez la caméra puis réessayez.'
+      );
+      await stopScanner();
+    } finally {
+      setScannerPendingStart(false);
     }
   };
 
   useEffect(() => {
     return () => {
-      stopScanner();
+      void stopScanner();
     };
   }, []);
+
+  useEffect(() => {
+    if (isScannerOpen && scannerPendingStart) {
+      void initializeScanner();
+    }
+  }, [isScannerOpen, scannerPendingStart]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', animation: 'fadeIn .3s both' }}>
@@ -308,7 +299,6 @@ export default function ValidateLivraisonOrdonnance() {
                         variant="secondary"
                         fullWidth
                         onClick={startScanner}
-                        disabled={!isScannerSupported}
                       >
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
                           <BiIcon name="qr-code-scan" />
@@ -321,18 +311,27 @@ export default function ValidateLivraisonOrdonnance() {
                           borderRadius: 'var(--radius)',
                           overflow: 'hidden',
                           border: '1px solid var(--gray-300)',
-                          background: '#000',
+                          background: '#0b0f14',
+                          minHeight: '280px',
                         }}>
-                          <video
-                            ref={videoRef}
-                            autoPlay
-                            muted
-                            playsInline
-                            style={{ width: '100%', maxHeight: '260px', objectFit: 'cover' }}
-                          />
+                          <div id={scannerElementId} style={{ width: '100%' }} />
+                          {scannerStatus !== 'scanning' && (
+                            <div style={{
+                              minHeight: '280px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              color: '#fff',
+                              fontSize: '13px',
+                              padding: '24px',
+                              textAlign: 'center',
+                            }}>
+                              {scannerError || 'Initialisation de la caméra...'}
+                            </div>
+                          )}
                         </div>
                         <div style={{ marginTop: '8px' }}>
-                          <Button variant="ghost" fullWidth onClick={stopScanner}>
+                          <Button variant="ghost" fullWidth onClick={() => void stopScanner()}>
                             Arrêter le scan
                           </Button>
                         </div>
