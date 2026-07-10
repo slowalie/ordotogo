@@ -1,10 +1,17 @@
 import { useApp } from './context/AppContext';
+import { useLocation } from 'react-router-dom';
 import AuthPage      from './pages/AuthPage';
+import CompleteAccountPage from './pages/completeAccountPages';
 import PatientPage   from './pages/patient/PatientPage';
 import PharmacistPage from './pages/pharmacist/PharmacistPage';
 
 export default function App() {
   const { role, authReady } = useApp();
+  const location = useLocation();
+
+  if (location.pathname === '/complete-account') {
+    return <CompleteAccountPage />;
+  }
 
   if (!authReady) {
     return (

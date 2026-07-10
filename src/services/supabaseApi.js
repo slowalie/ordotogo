@@ -610,6 +610,59 @@ export async function signOut() {
   return supabase.auth.signOut();
 }
 
+export async function completeInvitedAccount({ displayName, password }) {
+  if (!isSupabaseConfigured) {
+    return { data: null, error: new Error('Supabase n\'est pas configuré') };
+  }
+
+  const safeDisplayName = String(displayName || '').trim();
+  const safePassword = String(password || '');
+
+  if (!safeDisplayName || !safePassword) {
+    return { data: null, error: new Error('Renseignez votre nom d\'affichage et mot de passe.') };
+  }
+
+  const { data: userResult, error: userError } = await supabase.auth.getUser();
+  if (userError) {
+    return { data: null, error: userError };
+  }
+
+  const currentUser = userResult?.user || null;
+  if (!currentUser) {
+    return { data: null, error: new Error('Aucune session active. Ouvrez le lien d’invitation depuis votre email.') };
+  }
+
+  const { error: authUpdateError } = await supabase.auth.updateUser({
+    password: safePassword,
+    data: {
+      display_name: safeDisplayName,
+    },
+  });
+
+  if (authUpdateError) {
+    return { data: null, error: authUpdateError };
+  }
+
+  const { error: profileUpdateError } = await supabase
+    .from('profiles')
+    .update({
+      display_name: safeDisplayName,
+    })
+    .eq('id', currentUser.id);
+
+  if (profileUpdateError) {
+    return { data: null, error: profileUpdateError };
+  }
+
+  return {
+    data: {
+      userId: currentUser.id,
+      displayName: safeDisplayName,
+    },
+    error: null,
+  };
+}
+
 export async function fetchPharmacies() {
   if (!isSupabaseConfigured) return { data: [], error: null };
 
@@ -714,7 +767,7 @@ export async function fetchProfileById(userId) {
 
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, role, display_name, phone, avatar_url, created_at, updated_at')
+    .select('id, role, display_name, first_name, last_name, phone, avatar_url, created_at, updated_at')
     .eq('id', userId)
     .single();
 
