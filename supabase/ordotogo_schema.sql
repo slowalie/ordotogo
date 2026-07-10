@@ -58,6 +58,8 @@ create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   role public.user_role not null default 'patient',
   display_name text not null,
+  first_name text,
+  last_name text,
   phone text,
   avatar_url text,
   created_at timestamptz not null default now(),
@@ -265,7 +267,11 @@ begin
   values (
     new.id,
     v_role,
-    coalesce(new.raw_user_meta_data ->> 'display_name', split_part(new.email, '@', 1))
+    coalesce(
+      new.raw_user_meta_data ->> 'display_name',
+      nullif(trim(coalesce(new.raw_user_meta_data ->> 'first_name', '') || ' ' || coalesce(new.raw_user_meta_data ->> 'last_name', '')), ''),
+      split_part(new.email, '@', 1)
+    )
   )
   on conflict (id) do nothing;
 
