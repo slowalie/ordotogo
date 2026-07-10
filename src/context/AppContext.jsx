@@ -38,8 +38,10 @@ function readPersistedState() {
   }
 }
 
-function toDisplayName(profile, email) {
+function toDisplayName(profile, email, metadata = {}) {
   if (profile?.display_name) return profile.display_name;
+
+  if (metadata?.display_name) return String(metadata.display_name).trim();
 
   const localPart = String(email || '').split('@')[0] || '';
   const prettyName = localPart
@@ -66,6 +68,7 @@ async function loadWorkspaceForUser(sessionUser) {
   const ownedPharmacy = workspace?.ownedPharmacy || null;
   const resolvedRole = workspace?.role === 'pharmacist' ? 'pharmacist' : 'patient';
   const email = sessionUser.email || '';
+  const metadata = sessionUser?.user_metadata || {};
 
   return {
     role: resolvedRole,
@@ -73,7 +76,7 @@ async function loadWorkspaceForUser(sessionUser) {
     user: {
       id: sessionUser.id,
       email,
-      name: toDisplayName(profile, email),
+      name: toDisplayName(profile, email, metadata),
       role: resolvedRole,
       pharmacyId: ownedPharmacy?.id || null,
       pharmacyName: ownedPharmacy?.name || null,

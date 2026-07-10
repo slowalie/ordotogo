@@ -643,17 +643,6 @@ export async function completeInvitedAccount({ displayName, password }) {
     return { data: null, error: authUpdateError };
   }
 
-  const { error: profileUpdateError } = await supabase
-    .from('profiles')
-    .update({
-      display_name: safeDisplayName,
-    })
-    .eq('id', currentUser.id);
-
-  if (profileUpdateError) {
-    return { data: null, error: profileUpdateError };
-  }
-
   return {
     data: {
       userId: currentUser.id,
